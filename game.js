@@ -1,4 +1,5 @@
-// game.js (REPLACE ENTIRE FILE)
+// game.js (PASTE THIS WHOLE FILE — REPLACE ENTIRE game.js)
+//
 // Requires:
 //   Assets/StephenPixel.png
 //   Assets/Stone.png
@@ -12,37 +13,56 @@ const uiStatus = document.getElementById("status") || { textContent: "" };
 const W = canvas.width;
 const H = canvas.height;
 
-// ======== TUNING ========
+// ===================== TUNING =====================
+
+// Ground line (visual + collision reference)
 const groundY = 250;
 
-// Big jump + glide
-const gravity = 0.38;
-const jumpPower = -14.6;
-const glideAssist = -0.18;
-const glideMaxFrames = 14;
+// Speed (game felt slow)
+const BASE_SPEED = 6.2;          // was 4.0
+const SPEED_GAIN = 1 / 850;      // how fast it ramps with score
+const MAX_SPEED_ADD = 7.0;       // max extra speed
 
-// Visual placement: LOWER Stephen to ground (increase if still floating)
-const STEPHEN_DRAW_Y_OFFSET = 44;   // << lower more
+// Spawn
+const SPAWN_BASE = 90;           // lower = more frequent
+const SPAWN_MIN = 46;
+
+// Jump + glide (glide was too strong)
+// - bigger jump still
+// - glide now: short, weak, and has cooldown
+const gravity = 0.55;
+const jumpPower = -15.8;
+
+const GLIDE_ASSIST = -0.10;      // weaker upward assist
+const GLIDE_MAX_FRAMES = 8;      // short glide duration
+const GLIDE_COOLDOWN_FRAMES = 26; // must wait before gliding again
+const GLIDE_ONLY_WHILE_RISING = true;
+
+// Stephen visual alignment (he was floating)
+const STEPHEN_DRAW_Y_OFFSET = 64; // increase until feet are on line
 const STEPHEN_DRAW_X_OFFSET = 14;
 
-// Stone flight tuning
-const STONE_FLAT_VY = 0.25;         // smaller = flatter flight
-const STONE_SIZE_MULT = 3.0;        // PNG scale
+// Stones: fly across longer + stay on-screen
+const STONE_SIZE_MULT = 2.9;
+const STONE_VY_RANGE = 0.10;     // almost flat
 
-// ======== Game state ========
+// Throw height
+const THROW_Y_MIN = 95;
+const THROW_Y_MAX = 140;
+
+// ===================== STATE =====================
 let score = 0;
 let running = false;
 let dead = false;
 
-let speed = 4.0;
-let spawnEvery = 120;
-let spawnTimer = 0;
+let speed = BASE_SPEED;
+let spawnEvery = SPAWN_BASE;
 
-// Jump hold (glide)
 let jumpHeld = false;
 let jumpHoldFrames = 0;
+let glideCooldown = 0;
 
-// ======== Sprites ========
+// ===================== SPRITES =====================
 const stephenImg = new Image();
 stephenImg.src = "./Assets/StephenPixel.png";
 
@@ -55,13 +75,12 @@ stephenImg.onload = () => {
   SHEET.frameH = stephenImg.height;
 };
 
-// Stone sprite (PNG)
 const stoneImg = new Image();
 stoneImg.src = "./Assets/Stone.png";
 let stoneReady = false;
 stoneImg.onload = () => { stoneReady = true; };
 
-// ======== Stephen hitbox ========
+// ===================== PLAYER (HITBOX) =====================
 const stephen = {
   x: 160,
   y: groundY - 46,
@@ -71,15 +90,14 @@ const stephen = {
   onGround: true
 };
 
-// ======== Projectiles (stones) ========
-let stones = [];
-let stoneId = 1;
-
-// ======== Throwers (no collision) ========
+// ===================== ENTITIES =====================
 let throwers = [];
 let throwerTimer = 0;
 
-// ======== Speech bubble ========
+let stones = [];
+let stoneId = 1;
+
+// ===================== SPEECH =====================
 const quotes = [
   "Jesus is Lord.",
   "I see the heavens opened.",
@@ -90,13 +108,12 @@ const quotes = [
 ];
 let bubble = { text: "", t: 0, fade: 26, nextAt: 180 };
 
-// ======== Background ========
+// ===================== BACKGROUND =====================
 const bg = { t: 0, dunes1: [], dunes2: [], temples: [] };
 
 function rand(min, max) { return Math.random() * (max - min) + min; }
 function randi(min, max) { return Math.floor(rand(min, max + 1)); }
 
-// ======== Background helpers ========
 function initBackground() {
   bg.dunes1 = [];
   bg.dunes2 = [];
@@ -217,6 +234,7 @@ function drawDunes() {
   ctx.closePath();
   ctx.fill();
 
+  // ground line
   ctx.strokeStyle = "rgba(30,20,18,0.35)";
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -225,7 +243,7 @@ function drawDunes() {
   ctx.stroke();
 }
 
-// ======== Collision ========
+// ===================== COLLISION =====================
 function rectCircleHit(rx, ry, rw, rh, cx, cy, cr) {
   const closestX = Math.max(rx, Math.min(cx, rx + rw));
   const closestY = Math.max(ry, Math.min(cy, ry + rh));
@@ -234,21 +252,20 @@ function rectCircleHit(rx, ry, rw, rh, cx, cy, cr) {
   return (dx * dx + dy * dy) <= (cr * cr);
 }
 
-// ======== Difficulty ========
+// ===================== DIFFICULTY =====================
 function updateDifficulty() {
-  speed = 4.0 + Math.min(7.0, score / 950);
-  spawnEvery = Math.max(58, 120 - Math.floor(score / 520));
+  speed = BASE_SPEED + Math.min(MAX_SPEED_ADD, score * SPEED_GAIN * 1000);
+  spawnEvery = Math.max(SPAWN_MIN, SPAWN_BASE - Math.floor(score / 650));
 }
 
-// ======== Reset / start ========
+// ===================== RESET =====================
 function reset() {
   score = 0;
   running = false;
   dead = false;
 
-  speed = 4.0;
-  spawnEvery = 120;
-  spawnTimer = 0;
+  speed = BASE_SPEED;
+  spawnEvery = SPAWN_BASE;
 
   stones = [];
   throwers = [];
@@ -261,6 +278,7 @@ function reset() {
 
   jumpHeld = false;
   jumpHoldFrames = 0;
+  glideCooldown = 0;
 
   bubble.text = "";
   bubble.t = 0;
@@ -284,8 +302,13 @@ function jump() {
   if (!stephen.onGround) return;
   stephen.vy = jumpPower;
   stephen.onGround = false;
+
+  // reset glide usage per jump
+  jumpHoldFrames = 0;
+  glideCooldown = 0;
 }
 
+// ===================== SPEECH =====================
 function updateSpeech() {
   if (!running || dead) return;
 
@@ -303,17 +326,21 @@ function updateSpeech() {
   }
 }
 
-// ======== Throwers + stones (flat flight) ========
+// ===================== THROWERS + STONES =====================
 function spawnThrower() {
-  const x = W + randi(160, 360);
+  const x = W + randi(140, 300);
   throwers.push({ x, thrown: false });
 }
 
 function spawnStoneFrom(x, y) {
-  const r = randi(10, 16);
+  const r = randi(12, 18);
 
-  const vx = -(speed + rand(2.4, 4.2));
-  const vy = rand(-STONE_FLAT_VY, STONE_FLAT_VY);
+  // IMPORTANT: stone must cross the whole play area before disappearing
+  // so its leftward speed should be close to game speed (not huge)
+  const vx = -(speed + rand(0.8, 1.8));
+
+  // Flat flight (no gravity)
+  const vy = rand(-STONE_VY_RANGE, STONE_VY_RANGE);
 
   stones.push({
     id: stoneId++,
@@ -321,13 +348,15 @@ function spawnStoneFrom(x, y) {
     r,
     vx, vy,
     rot: rand(0, Math.PI * 2),
-    vr: rand(-0.14, 0.14)
+    vr: rand(-0.12, 0.12)
   });
 }
 
 function updateThrowers() {
   throwerTimer++;
-  if (throwerTimer > randi(120, 200)) {
+
+  // more frequent spawns
+  if (throwerTimer >= spawnEvery) {
     throwerTimer = 0;
     spawnThrower();
   }
@@ -335,10 +364,11 @@ function updateThrowers() {
   for (const p of throwers) {
     p.x -= speed * 0.9;
 
+    // throw once when visible
     if (!p.thrown && p.x < W * 0.82) {
       p.thrown = true;
       const handX = p.x + 12;
-      const handY = groundY - randi(95, 140); // higher throw height
+      const handY = groundY - randi(THROW_Y_MIN, THROW_Y_MAX);
       spawnStoneFrom(handX, handY);
     }
   }
@@ -352,10 +382,12 @@ function updateStones() {
     s.y += s.vy;
     s.rot += s.vr;
   }
-  stones = stones.filter(s => s.x > -180 && s.y > -180 && s.y < H + 180);
+
+  // FIX: don't delete them early. keep until far left.
+  stones = stones.filter(s => s.x > -260);
 }
 
-// ======== Draw entities ========
+// ===================== DRAW ENTITIES =====================
 function drawThrowers() {
   for (const p of throwers) {
     ctx.save();
@@ -408,18 +440,18 @@ function drawStephen() {
   }
 
   const sx = frame * SHEET.frameW;
-  const sy = 0;
   const sw = SHEET.frameW;
   const sh = SHEET.frameH;
 
   const dw = sw * SHEET.scale;
   const dh = sh * SHEET.scale;
 
+  // Feet placement: put sprite feet on the ground line via offset
   const dx = stephen.x - STEPHEN_DRAW_X_OFFSET;
   const dy = groundY - dh + STEPHEN_DRAW_Y_OFFSET;
 
   ctx.imageSmoothingEnabled = true;
-  ctx.drawImage(stephenImg, sx, sy, sw, sh, dx, dy, dw, dh);
+  ctx.drawImage(stephenImg, sx, 0, sw, sh, dx, dy, dw, dh);
 }
 
 function drawSpeechBubble() {
@@ -489,9 +521,12 @@ function drawOverlay() {
   }
 }
 
-// ======== Loop ========
+// ===================== UPDATE / DRAW LOOP =====================
 function update() {
   updateBackground();
+
+  // cooldown ticks even if not running
+  if (glideCooldown > 0) glideCooldown--;
 
   if (!running || dead) {
     updateSpeech();
@@ -508,9 +543,18 @@ function update() {
   // Player physics
   stephen.vy += gravity;
 
-  if (!stephen.onGround && jumpHeld && stephen.vy < 0 && jumpHoldFrames < glideMaxFrames) {
-    stephen.vy += glideAssist;
+  // Glide: short + only once per cooldown
+  const canGlide = (glideCooldown === 0) && (jumpHoldFrames < GLIDE_MAX_FRAMES);
+  const risingOk = !GLIDE_ONLY_WHILE_RISING || (stephen.vy < 0);
+
+  if (!stephen.onGround && jumpHeld && canGlide && risingOk) {
+    stephen.vy += GLIDE_ASSIST;
     jumpHoldFrames++;
+
+    // when glide ends, force cooldown
+    if (jumpHoldFrames >= GLIDE_MAX_FRAMES) {
+      glideCooldown = GLIDE_COOLDOWN_FRAMES;
+    }
   }
 
   stephen.y += stephen.vy;
@@ -520,9 +564,10 @@ function update() {
     stephen.vy = 0;
     stephen.onGround = true;
     jumpHoldFrames = 0;
+    glideCooldown = 0;
   }
 
-  // Collisions (stones only)
+  // Collision (stones only)
   for (const s of stones) {
     if (rectCircleHit(stephen.x, stephen.y, stephen.w, stephen.h, s.x, s.y, s.r)) {
       dead = true;
@@ -554,7 +599,7 @@ function loop() {
   requestAnimationFrame(loop);
 }
 
-// ======== Input ========
+// ===================== INPUT =====================
 document.addEventListener("keydown", (e) => {
   if (e.code === "Space" || e.code === "ArrowUp") {
     jumpHeld = true;
@@ -566,7 +611,7 @@ document.addEventListener("keydown", (e) => {
 document.addEventListener("keyup", (e) => {
   if (e.code === "Space" || e.code === "ArrowUp") {
     jumpHeld = false;
-    jumpHoldFrames = 0;
+    // do NOT reset jumpHoldFrames here; cooldown logic handles it
   }
 });
 
