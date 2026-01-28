@@ -220,4 +220,84 @@ function drawSpeechBubble() {
 
   // tail
   ctx.beginPath();
-  const tx = Math.max(bx +
+  const tx = Math.max(bx + 16, Math.min(bx + bw - 16, stephen.x + 6));
+  ctx.moveTo(tx, by + bh);
+  ctx.lineTo(tx + 10, by + bh + 10);
+  ctx.lineTo(tx + 22, by + bh);
+  ctx.closePath();
+  ctx.fill();
+
+  // text
+  ctx.fillStyle = "#0b0b0c";
+  ctx.fillText(bubble.text, bx + paddingX, by + 19);
+
+  ctx.restore();
+}
+
+function roundRect(x, y, w, h, r) {
+  const rr = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+}
+
+function draw() {
+  // background
+  ctx.clearRect(0, 0, W, H);
+
+  // colors
+  ctx.strokeStyle = "#2a2a33";
+  ctx.lineWidth = 2;
+
+  // ground
+  drawGround();
+
+  // entities
+  ctx.fillStyle = "#eaeaea";
+  drawStephen();
+
+  ctx.fillStyle = "#8f8f97";
+  for (const s of stones) drawStone(s);
+
+  // speech bubble on top
+  ctx.fillStyle = "#eaeaea";
+  drawSpeechBubble();
+
+  // dead overlay
+  if (dead) {
+    ctx.fillStyle = "rgba(0,0,0,0.35)";
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.fillStyle = "#eaeaea";
+    ctx.font = "24px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+    ctx.fillText("You have been martyred.", 320, 120);
+
+    ctx.font = "14px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+    ctx.fillText("Press R to restart", 385, 150);
+  }
+}
+
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+document.addEventListener("keydown", (e) => {
+  if (e.code === "Space" || e.code === "ArrowUp") jump();
+  if (e.code === "KeyR") reset();
+});
+
+// Mobile tap support
+canvas.addEventListener("pointerdown", () => {
+  if (dead) reset();
+  else jump();
+});
+
+reset();
+loop();
+
