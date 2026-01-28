@@ -389,7 +389,7 @@ function drawStephen() {
 
   // Put feet on ground and align with hitbox
   const dx = stephen.x - 14;
-  const dy = groundY - dh + 2;
+  const dy = groundY - dh + 18;
 
   ctx.imageSmoothingEnabled = true; // keep soft pixels; set false if you want sharper
   ctx.drawImage(stephenImg, sx, sy, sw, sh, dx, dy, dw, dh);
@@ -400,13 +400,58 @@ function drawStephen() {
 }
 
 function drawStones() {
-  ctx.fillStyle = "rgba(45,30,26,0.95)";
   for (const s of stones) {
+    // Main rock body (irregular)
+    ctx.save();
+    ctx.translate(s.x, s.y);
+
+    // subtle wobble so they don't look stamped
+    const wobble = (s.r * 0.15) * Math.sin((bg.t * 0.18) + (s.x * 0.02));
+    ctx.rotate(wobble * 0.02);
+
+    const r = s.r;
+
+    // shadow on ground
+    ctx.globalAlpha = 0.28;
+    ctx.fillStyle = "rgba(0,0,0,1)";
     ctx.beginPath();
-    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    ctx.ellipse(0, r * 0.9, r * 1.25, r * 0.55, 0, 0, Math.PI * 2);
     ctx.fill();
+
+    // rock shape
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = "rgba(65,52,46,1)";
+    ctx.beginPath();
+    ctx.moveTo(-r, 0);
+    ctx.quadraticCurveTo(-r * 1.15, -r * 0.55, -r * 0.25, -r * 1.05);
+    ctx.quadraticCurveTo(r * 0.35, -r * 1.25, r * 1.05, -r * 0.45);
+    ctx.quadraticCurveTo(r * 1.25, r * 0.35, r * 0.35, r * 1.05);
+    ctx.quadraticCurveTo(-r * 0.55, r * 1.15, -r, 0);
+    ctx.closePath();
+    ctx.fill();
+
+    // highlight
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = "rgba(235,225,210,1)";
+    ctx.beginPath();
+    ctx.ellipse(-r * 0.25, -r * 0.35, r * 0.55, r * 0.35, -0.6, 0, Math.PI * 2);
+    ctx.fill();
+
+    // speckles
+    ctx.globalAlpha = 0.18;
+    ctx.fillStyle = "rgba(0,0,0,1)";
+    for (let i = 0; i < 3; i++) {
+      const sx = (Math.random() * 2 - 1) * r * 0.5;
+      const sy = (Math.random() * 2 - 1) * r * 0.5;
+      ctx.beginPath();
+      ctx.arc(sx, sy, r * 0.10, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
   }
 }
+
 
 function drawSpeechBubble() {
   if (!bubble.text || bubble.t <= 0 || dead) return;
