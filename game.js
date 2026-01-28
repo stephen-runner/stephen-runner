@@ -1,8 +1,8 @@
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-const uiScore = document.getElementById("score");
-const uiStatus = document.getElementById("status");
+const uiScore = document.getElementById("score") || { textContent: "" };
+const uiStatus = document.getElementById("status") || { textContent: "" };
 
 const W = canvas.width;
 const H = canvas.height;
