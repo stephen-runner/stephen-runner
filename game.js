@@ -39,7 +39,7 @@ const GLIDE_COOLDOWN_FRAMES = 26; // must wait before gliding again
 const GLIDE_ONLY_WHILE_RISING = true;
 
 // Stephen visual alignment (he was floating)
-const STEPHEN_DRAW_Y_OFFSET = 64; // increase until feet are on line
+const STEPHEN_DRAW_Y_OFFSET = 96; // increase until feet are on line
 const STEPHEN_DRAW_X_OFFSET = 14;
 
 // Stones: fly across longer + stay on-screen
