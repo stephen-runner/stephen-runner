@@ -1,4 +1,8 @@
 // game.js (REPLACE ENTIRE FILE)
+// Requires:
+//   Assets/StephenPixel.png
+//   Assets/Stone.png
+
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
@@ -11,15 +15,19 @@ const H = canvas.height;
 // ======== TUNING ========
 const groundY = 250;
 
-// Bigger + floatier jump
-const gravity = 0.38;              // player gravity
-const jumpPower = -14.6;           // bigger jump
-const glideAssist = -0.18;         // upward assist while holding jump
-const glideMaxFrames = 14;         // how long glide can extend hang-time
+// Big jump + glide
+const gravity = 0.38;
+const jumpPower = -14.6;
+const glideAssist = -0.18;
+const glideMaxFrames = 14;
 
-// Visual placement: LOWER Stephen to ground (increase this if still floating)
-const STEPHEN_DRAW_Y_OFFSET = 34;  // <<<<<< main “lower to ground” knob
+// Visual placement: LOWER Stephen to ground (increase if still floating)
+const STEPHEN_DRAW_Y_OFFSET = 44;   // << lower more
 const STEPHEN_DRAW_X_OFFSET = 14;
+
+// Stone flight tuning
+const STONE_FLAT_VY = 0.25;         // smaller = flatter flight
+const STONE_SIZE_MULT = 3.0;        // PNG scale
 
 // ======== Game state ========
 let score = 0;
@@ -30,13 +38,13 @@ let speed = 4.0;
 let spawnEvery = 120;
 let spawnTimer = 0;
 
-// jump hold (glide)
+// Jump hold (glide)
 let jumpHeld = false;
 let jumpHoldFrames = 0;
 
-// ======== Stephen sprite ========
+// ======== Sprites ========
 const stephenImg = new Image();
-stephenImg.src = "./Assets/StephenPixel.png"; // must match your repo path exactly
+stephenImg.src = "./Assets/StephenPixel.png";
 
 let stephenImgReady = false;
 const SHEET = { frames: 3, frameW: 0, frameH: 0, scale: 0.33 };
@@ -47,7 +55,13 @@ stephenImg.onload = () => {
   SHEET.frameH = stephenImg.height;
 };
 
-// Stephen collision hitbox (kept tight; visual sprite can be offset)
+// Stone sprite (PNG)
+const stoneImg = new Image();
+stoneImg.src = "./Assets/Stone.png";
+let stoneReady = false;
+stoneImg.onload = () => { stoneReady = true; };
+
+// ======== Stephen hitbox ========
 const stephen = {
   x: 160,
   y: groundY - 46,
@@ -57,8 +71,9 @@ const stephen = {
   onGround: true
 };
 
-// ======== Thrown stones (projectiles) ========
+// ======== Projectiles (stones) ========
 let stones = [];
+let stoneId = 1;
 
 // ======== Throwers (no collision) ========
 let throwers = [];
@@ -75,19 +90,13 @@ const quotes = [
 ];
 let bubble = { text: "", t: 0, fade: 26, nextAt: 180 };
 
-// ======== Desert background ========
+// ======== Background ========
 const bg = { t: 0, dunes1: [], dunes2: [], temples: [] };
 
 function rand(min, max) { return Math.random() * (max - min) + min; }
 function randi(min, max) { return Math.floor(rand(min, max + 1)); }
 
-// Stable “random” for rocks (no flicker)
-function hash(n) {
-  // deterministic pseudo-random 0..1
-  const s = Math.sin(n * 999.123) * 10000;
-  return s - Math.floor(s);
-}
-
+// ======== Background helpers ========
 function initBackground() {
   bg.dunes1 = [];
   bg.dunes2 = [];
@@ -186,7 +195,6 @@ function drawTemples() {
 }
 
 function drawDunes() {
-  // back dunes
   ctx.fillStyle = "#8a6242";
   ctx.beginPath();
   ctx.moveTo(0, groundY - 55);
@@ -198,7 +206,6 @@ function drawDunes() {
   ctx.closePath();
   ctx.fill();
 
-  // front dunes
   ctx.fillStyle = "#a4764d";
   ctx.beginPath();
   ctx.moveTo(0, groundY - 15);
@@ -210,7 +217,6 @@ function drawDunes() {
   ctx.closePath();
   ctx.fill();
 
-  // ground line
   ctx.strokeStyle = "rgba(30,20,18,0.35)";
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -219,7 +225,7 @@ function drawDunes() {
   ctx.stroke();
 }
 
-// ======== Mechanics ========
+// ======== Collision ========
 function rectCircleHit(rx, ry, rw, rh, cx, cy, cr) {
   const closestX = Math.max(rx, Math.min(cx, rx + rw));
   const closestY = Math.max(ry, Math.min(cy, ry + rh));
@@ -228,11 +234,13 @@ function rectCircleHit(rx, ry, rw, rh, cx, cy, cr) {
   return (dx * dx + dy * dy) <= (cr * cr);
 }
 
+// ======== Difficulty ========
 function updateDifficulty() {
   speed = 4.0 + Math.min(7.0, score / 950);
   spawnEvery = Math.max(58, 120 - Math.floor(score / 520));
 }
 
+// ======== Reset / start ========
 function reset() {
   score = 0;
   running = false;
@@ -245,6 +253,7 @@ function reset() {
   stones = [];
   throwers = [];
   throwerTimer = 0;
+  stoneId = 1;
 
   stephen.y = groundY - stephen.h;
   stephen.vy = 0;
@@ -294,34 +303,29 @@ function updateSpeech() {
   }
 }
 
-// ======== Throwers + stones ========
-let stoneId = 1;
-
+// ======== Throwers + stones (flat flight) ========
 function spawnThrower() {
   const x = W + randi(160, 360);
-  throwers.push({
-    x,
-    thrown: false
-  });
+  throwers.push({ x, thrown: false });
 }
 
 function spawnStoneFrom(x, y) {
-  const r = randi(7, 12);
-  const vx = -(speed + rand(1.2, 2.8));   // left
-  const vy = rand(-4.6, -1.6);            // up a bit
-  const id = stoneId++;
+  const r = randi(10, 16);
+
+  const vx = -(speed + rand(2.4, 4.2));
+  const vy = rand(-STONE_FLAT_VY, STONE_FLAT_VY);
 
   stones.push({
-    id,
+    id: stoneId++,
     x, y,
     r,
-    vx,
-    vy
+    vx, vy,
+    rot: rand(0, Math.PI * 2),
+    vr: rand(-0.14, 0.14)
   });
 }
 
 function updateThrowers() {
-  // spawn rate
   throwerTimer++;
   if (throwerTimer > randi(120, 200)) {
     throwerTimer = 0;
@@ -331,11 +335,10 @@ function updateThrowers() {
   for (const p of throwers) {
     p.x -= speed * 0.9;
 
-    // throw once when they enter the scene
     if (!p.thrown && p.x < W * 0.82) {
       p.thrown = true;
       const handX = p.x + 12;
-      const handY = groundY - randi(62, 92);
+      const handY = groundY - randi(95, 140); // higher throw height
       spawnStoneFrom(handX, handY);
     }
   }
@@ -345,11 +348,11 @@ function updateThrowers() {
 
 function updateStones() {
   for (const s of stones) {
-    s.vy += 0.28;   // stone gravity
     s.x += s.vx;
     s.y += s.vy;
+    s.rot += s.vr;
   }
-  stones = stones.filter(s => s.x > -160 && s.y < H + 120);
+  stones = stones.filter(s => s.x > -180 && s.y > -180 && s.y < H + 180);
 }
 
 // ======== Draw entities ========
@@ -359,15 +362,11 @@ function drawThrowers() {
     ctx.globalAlpha = 0.33;
     ctx.fillStyle = "rgba(25,18,16,1)";
 
-    // body
     ctx.fillRect(p.x - 8, groundY - 44, 16, 32);
-
-    // head
     ctx.beginPath();
     ctx.arc(p.x, groundY - 54, 9, 0, Math.PI * 2);
     ctx.fill();
 
-    // arm
     ctx.globalAlpha = 0.28;
     ctx.fillRect(p.x + 4, groundY - 38, 14, 6);
 
@@ -377,59 +376,27 @@ function drawThrowers() {
 
 function drawStones() {
   for (const s of stones) {
-    const r = s.r;
-
-    // shadow (based on height)
-    const height = Math.max(0, groundY - s.y);
-    const shadowAlpha = Math.max(0.08, Math.min(0.28, 0.28 - height / 600));
-    const shadowW = r * (1.2 + height / 220);
-    const shadowH = r * 0.55;
+    const size = s.r * STONE_SIZE_MULT;
 
     ctx.save();
-    ctx.translate(s.x, Math.min(groundY - 3, s.y));
+    ctx.translate(s.x, s.y);
+    ctx.rotate(s.rot);
 
-    // shadow
-    ctx.globalAlpha = shadowAlpha;
-    ctx.fillStyle = "rgba(0,0,0,1)";
-    ctx.beginPath();
-    ctx.ellipse(0, (groundY - Math.min(groundY - 3, s.y)) + r * 1.1, shadowW, shadowH, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // rock (irregular, stable)
-    ctx.globalAlpha = 1;
-    ctx.translate(0, 0);
-    const wob = (hash(s.id) - 0.5) * 0.25;
-    ctx.rotate(wob);
-
-    ctx.fillStyle = "rgba(70,58,52,1)";
-    ctx.beginPath();
-    ctx.moveTo(-r, 0);
-    ctx.quadraticCurveTo(-r * 1.15, -r * 0.55, -r * 0.25, -r * 1.05);
-    ctx.quadraticCurveTo(r * 0.35, -r * 1.25, r * 1.05, -r * 0.45);
-    ctx.quadraticCurveTo(r * 1.25, r * 0.35, r * 0.35, r * 1.05);
-    ctx.quadraticCurveTo(-r * 0.55, r * 1.15, -r, 0);
-    ctx.closePath();
-    ctx.fill();
-
-    // highlight
-    ctx.globalAlpha = 0.30;
-    ctx.fillStyle = "rgba(235,225,210,1)";
-    ctx.beginPath();
-    ctx.ellipse(-r * 0.25, -r * 0.35, r * 0.55, r * 0.35, -0.6, 0, Math.PI * 2);
-    ctx.fill();
-
-    // outline
-    ctx.globalAlpha = 0.25;
-    ctx.strokeStyle = "rgba(0,0,0,1)";
-    ctx.lineWidth = 2;
-    ctx.stroke();
+    if (stoneReady) {
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(stoneImg, -size / 2, -size / 2, size, size);
+    } else {
+      ctx.fillStyle = "rgba(70,58,52,1)";
+      ctx.beginPath();
+      ctx.arc(0, 0, s.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     ctx.restore();
   }
 }
 
 function drawStephen() {
-  // 0 idle, 1 run, 2 jump
   let frame = 0;
   if (!stephen.onGround) frame = 2;
   else if (running) frame = (Math.floor(score / 7) % 2 === 0) ? 1 : 0;
@@ -448,16 +415,11 @@ function drawStephen() {
   const dw = sw * SHEET.scale;
   const dh = sh * SHEET.scale;
 
-  // anchor feet LOWER to the ground:
   const dx = stephen.x - STEPHEN_DRAW_X_OFFSET;
   const dy = groundY - dh + STEPHEN_DRAW_Y_OFFSET;
 
   ctx.imageSmoothingEnabled = true;
   ctx.drawImage(stephenImg, sx, sy, sw, sh, dx, dy, dw, dh);
-
-  // Debug hitbox (uncomment if needed)
-  // ctx.strokeStyle = "rgba(255,255,255,0.25)";
-  // ctx.strokeRect(stephen.x, stephen.y, stephen.w, stephen.h);
 }
 
 function drawSpeechBubble() {
@@ -527,7 +489,7 @@ function drawOverlay() {
   }
 }
 
-// ======== Update loop ========
+// ======== Loop ========
 function update() {
   updateBackground();
 
@@ -540,15 +502,12 @@ function update() {
   uiScore.textContent = String(score);
 
   updateDifficulty();
-
-  // Throwers + stones
   updateThrowers();
   updateStones();
 
   // Player physics
   stephen.vy += gravity;
 
-  // glide assist while rising
   if (!stephen.onGround && jumpHeld && stephen.vy < 0 && jumpHoldFrames < glideMaxFrames) {
     stephen.vy += glideAssist;
     jumpHoldFrames++;
@@ -563,7 +522,7 @@ function update() {
     jumpHoldFrames = 0;
   }
 
-  // Collisions: ONLY stones. Throwers are non-colliding.
+  // Collisions (stones only)
   for (const s of stones) {
     if (rectCircleHit(stephen.x, stephen.y, stephen.w, stephen.h, s.x, s.y, s.r)) {
       dead = true;
@@ -582,12 +541,10 @@ function draw() {
   drawTemples();
   drawDunes();
 
-  // people first (behind rocks), then rocks, then Stephen
   drawThrowers();
   drawStones();
   drawStephen();
   drawSpeechBubble();
-
   drawOverlay();
 }
 
@@ -613,13 +570,11 @@ document.addEventListener("keyup", (e) => {
   }
 });
 
-// Mobile tap: jump; if dead, restart
 canvas.addEventListener("pointerdown", () => {
   if (dead) reset();
   else {
     jumpHeld = true;
     jump();
-    // release quickly on tap (no long hold)
     setTimeout(() => { jumpHeld = false; }, 120);
   }
 });
