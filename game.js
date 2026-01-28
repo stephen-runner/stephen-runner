@@ -1,4 +1,4 @@
-// game.js (PASTE THIS WHOLE FILE — REPLACE ENTIRE game.js)
+// game.js (REPLACE ENTIRE FILE)
 //
 // Requires:
 //   Assets/StephenPixel.png
@@ -13,42 +13,40 @@ const uiStatus = document.getElementById("status") || { textContent: "" };
 const W = canvas.width;
 const H = canvas.height;
 
-// ===================== TUNING =====================
+// ===================== CORE TUNING =====================
 
-// Ground line (visual + collision reference)
+// Ground line (EVERYTHING anchors to this)
 const groundY = 250;
 
-// Speed (game felt slow)
-const BASE_SPEED = 6.2;          // was 4.0
-const SPEED_GAIN = 1 / 850;      // how fast it ramps with score
-const MAX_SPEED_ADD = 7.0;       // max extra speed
+// Speed
+const BASE_SPEED = 6.6;
+const SPEED_GAIN = 1 / 900;
+const MAX_SPEED_ADD = 7.5;
 
 // Spawn
-const SPAWN_BASE = 90;           // lower = more frequent
-const SPAWN_MIN = 46;
+const SPAWN_BASE = 86;
+const SPAWN_MIN = 42;
 
-// Jump + glide (glide was too strong)
-// - bigger jump still
-// - glide now: short, weak, and has cooldown
-const gravity = 0.55;
-const jumpPower = -15.8;
+// Jump / gravity
+const gravity = 0.58;
+const jumpPower = -16.2;
 
-const GLIDE_ASSIST = -0.10;      // weaker upward assist
-const GLIDE_MAX_FRAMES = 8;      // short glide duration
-const GLIDE_COOLDOWN_FRAMES = 26; // must wait before gliding again
+// Glide (short + cooldown)
+const GLIDE_ASSIST = -0.08;
+const GLIDE_MAX_FRAMES = 7;
+const GLIDE_COOLDOWN_FRAMES = 32;
 const GLIDE_ONLY_WHILE_RISING = true;
 
-// Stephen visual alignment (he was floating)
-const STEPHEN_DRAW_Y_OFFSET = 96; // increase until feet are on line
-const STEPHEN_DRAW_X_OFFSET = 14;
+// Stone visuals + hit
+const STONE_SIZE_MULT = 1.65;   // smaller
+const STONE_VY_RANGE = 0.05;    // almost flat
+const STONE_RADIUS_MIN = 7;     // smaller hit circle
+const STONE_RADIUS_MAX = 10;
+const STONE_HIT_MULT = 1.25;    // BUT make collision a bit forgiving
 
-// Stones: fly across longer + stay on-screen
-const STONE_SIZE_MULT = 2.9;
-const STONE_VY_RANGE = 0.10;     // almost flat
-
-// Throw height
-const THROW_Y_MIN = 95;
-const THROW_Y_MAX = 140;
+// Throw height (LOWER on screen)
+const THROW_ABOVE_GROUND_MIN = 40;  // 40px above ground
+const THROW_ABOVE_GROUND_MAX = 72;  // 72px above ground
 
 // ===================== STATE =====================
 let score = 0;
@@ -81,11 +79,13 @@ let stoneReady = false;
 stoneImg.onload = () => { stoneReady = true; };
 
 // ===================== PLAYER (HITBOX) =====================
+// KEY CHANGE: Stephen is ALWAYS anchored to groundY unless jumping.
+// We will NEVER "drift" him by offsets. His feet are always on the ground.
 const stephen = {
   x: 160,
-  y: groundY - 46,
-  w: 32,
-  h: 46,
+  w: 34,
+  h: 48,
+  y: 0,       // set in reset()
   vy: 0,
   onGround: true
 };
@@ -114,6 +114,7 @@ const bg = { t: 0, dunes1: [], dunes2: [], temples: [] };
 function rand(min, max) { return Math.random() * (max - min) + min; }
 function randi(min, max) { return Math.floor(rand(min, max + 1)); }
 
+// ===================== BACKGROUND =====================
 function initBackground() {
   bg.dunes1 = [];
   bg.dunes2 = [];
@@ -234,7 +235,7 @@ function drawDunes() {
   ctx.closePath();
   ctx.fill();
 
-  // ground line
+  // ground line (reference)
   ctx.strokeStyle = "rgba(30,20,18,0.35)";
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -272,6 +273,7 @@ function reset() {
   throwerTimer = 0;
   stoneId = 1;
 
+  // anchored to ground by definition:
   stephen.y = groundY - stephen.h;
   stephen.vy = 0;
   stephen.onGround = true;
@@ -300,10 +302,10 @@ function jump() {
   }
 
   if (!stephen.onGround) return;
+
   stephen.vy = jumpPower;
   stephen.onGround = false;
 
-  // reset glide usage per jump
   jumpHoldFrames = 0;
   glideCooldown = 0;
 }
@@ -333,13 +335,10 @@ function spawnThrower() {
 }
 
 function spawnStoneFrom(x, y) {
-  const r = randi(12, 18);
+  const r = randi(STONE_RADIUS_MIN, STONE_RADIUS_MAX);
 
-  // IMPORTANT: stone must cross the whole play area before disappearing
-  // so its leftward speed should be close to game speed (not huge)
-  const vx = -(speed + rand(0.8, 1.8));
-
-  // Flat flight (no gravity)
+  // Let stones stay around longer (not "teleporting away")
+  const vx = -(speed + rand(0.4, 1.2));
   const vy = rand(-STONE_VY_RANGE, STONE_VY_RANGE);
 
   stones.push({
@@ -348,14 +347,13 @@ function spawnStoneFrom(x, y) {
     r,
     vx, vy,
     rot: rand(0, Math.PI * 2),
-    vr: rand(-0.12, 0.12)
+    vr: rand(-0.10, 0.10)
   });
 }
 
 function updateThrowers() {
   throwerTimer++;
 
-  // more frequent spawns
   if (throwerTimer >= spawnEvery) {
     throwerTimer = 0;
     spawnThrower();
@@ -364,11 +362,13 @@ function updateThrowers() {
   for (const p of throwers) {
     p.x -= speed * 0.9;
 
-    // throw once when visible
     if (!p.thrown && p.x < W * 0.82) {
       p.thrown = true;
+
       const handX = p.x + 12;
-      const handY = groundY - randi(THROW_Y_MIN, THROW_Y_MAX);
+      const above = randi(THROW_ABOVE_GROUND_MIN, THROW_ABOVE_GROUND_MAX);
+      const handY = groundY - above; // LOWER on screen, near Stephen
+
       spawnStoneFrom(handX, handY);
     }
   }
@@ -383,11 +383,11 @@ function updateStones() {
     s.rot += s.vr;
   }
 
-  // FIX: don't delete them early. keep until far left.
-  stones = stones.filter(s => s.x > -260);
+  // Keep them until far left (no early deletion)
+  stones = stones.filter(s => s.x > -320);
 }
 
-// ===================== DRAW ENTITIES =====================
+// ===================== DRAW =====================
 function drawThrowers() {
   for (const p of throwers) {
     ctx.save();
@@ -446,9 +446,11 @@ function drawStephen() {
   const dw = sw * SHEET.scale;
   const dh = sh * SHEET.scale;
 
-  // Feet placement: put sprite feet on the ground line via offset
-  const dx = stephen.x - STEPHEN_DRAW_X_OFFSET;
-  const dy = groundY - dh + STEPHEN_DRAW_Y_OFFSET;
+  // ANCHOR FIX:
+  // Put the BOTTOM of the sprite exactly at the bottom of the hitbox.
+  // No offsets. This cannot drift.
+  const dx = stephen.x - 14;
+  const dy = (stephen.y + stephen.h) - dh;
 
   ctx.imageSmoothingEnabled = true;
   ctx.drawImage(stephenImg, sx, 0, sw, sh, dx, dy, dw, dh);
@@ -513,7 +515,7 @@ function drawOverlay() {
 
     ctx.fillStyle = "#f0e9db";
     ctx.font = "28px system-ui,-apple-system,Segoe UI,Roboto,Arial";
-    ctx.fillText("You have been martyred.", 320, 150);
+    ctx.fillText("You have been mtlrtyred.", 330, 150);
 
     ctx.font = "14px system-ui,-apple-system,Segoe UI,Roboto,Arial";
     ctx.fillStyle = "rgba(240,233,219,0.75)";
@@ -521,11 +523,10 @@ function drawOverlay() {
   }
 }
 
-// ===================== UPDATE / DRAW LOOP =====================
+// ===================== UPDATE LOOP =====================
 function update() {
   updateBackground();
 
-  // cooldown ticks even if not running
   if (glideCooldown > 0) glideCooldown--;
 
   if (!running || dead) {
@@ -540,36 +541,40 @@ function update() {
   updateThrowers();
   updateStones();
 
-  // Player physics
-  stephen.vy += gravity;
+  // ===== PLAYER PHYSICS (ANCHOR RULE) =====
+  // If on ground, hard-lock y every frame.
+  if (stephen.onGround) {
+    stephen.y = groundY - stephen.h;
+    stephen.vy = 0;
+  } else {
+    stephen.vy += gravity;
 
-  // Glide: short + only once per cooldown
-  const canGlide = (glideCooldown === 0) && (jumpHoldFrames < GLIDE_MAX_FRAMES);
-  const risingOk = !GLIDE_ONLY_WHILE_RISING || (stephen.vy < 0);
+    // glide (limited + cooldown)
+    const canGlide = (glideCooldown === 0) && (jumpHoldFrames < GLIDE_MAX_FRAMES);
+    const risingOk = !GLIDE_ONLY_WHILE_RISING || (stephen.vy < 0);
 
-  if (!stephen.onGround && jumpHeld && canGlide && risingOk) {
-    stephen.vy += GLIDE_ASSIST;
-    jumpHoldFrames++;
+    if (jumpHeld && canGlide && risingOk) {
+      stephen.vy += GLIDE_ASSIST;
+      jumpHoldFrames++;
+      if (jumpHoldFrames >= GLIDE_MAX_FRAMES) glideCooldown = GLIDE_COOLDOWN_FRAMES;
+    }
 
-    // when glide ends, force cooldown
-    if (jumpHoldFrames >= GLIDE_MAX_FRAMES) {
-      glideCooldown = GLIDE_COOLDOWN_FRAMES;
+    stephen.y += stephen.vy;
+
+    // land
+    if (stephen.y >= groundY - stephen.h) {
+      stephen.y = groundY - stephen.h;
+      stephen.vy = 0;
+      stephen.onGround = true;
+      jumpHoldFrames = 0;
+      glideCooldown = 0;
     }
   }
 
-  stephen.y += stephen.vy;
-
-  if (stephen.y >= groundY - stephen.h) {
-    stephen.y = groundY - stephen.h;
-    stephen.vy = 0;
-    stephen.onGround = true;
-    jumpHoldFrames = 0;
-    glideCooldown = 0;
-  }
-
-  // Collision (stones only)
+  // ===== COLLISION (stones only) =====
   for (const s of stones) {
-    if (rectCircleHit(stephen.x, stephen.y, stephen.w, stephen.h, s.x, s.y, s.r)) {
+    const hitR = s.r * STONE_HIT_MULT; // easier to actually kill
+    if (rectCircleHit(stephen.x, stephen.y, stephen.w, stephen.h, s.x, s.y, hitR)) {
       dead = true;
       running = false;
       uiStatus.textContent = " — You have been martyred.";
@@ -611,7 +616,6 @@ document.addEventListener("keydown", (e) => {
 document.addEventListener("keyup", (e) => {
   if (e.code === "Space" || e.code === "ArrowUp") {
     jumpHeld = false;
-    // do NOT reset jumpHoldFrames here; cooldown logic handles it
   }
 });
 
