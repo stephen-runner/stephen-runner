@@ -6,35 +6,40 @@
   <title>Stephen Runner</title>
   <style>
     :root { color-scheme: dark; }
-    body {
-      margin: 0;
-      background: #0b0b0c;
-      height: 100vh;
-      display: grid;
-      place-items: center;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    body{
+      margin:0;
+      background:#070709;
+      height:100vh;
+      display:grid;
+      place-items:center;
+      font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+      color:#eaeaea;
     }
-    .wrap { width: min(920px, 96vw); }
-    .hud {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      margin: 0 0 10px 0;
-      color: #eaeaea;
-      opacity: 0.9;
-      user-select: none;
+    .wrap{ width:min(980px, 96vw); }
+    .hud{
+      display:flex;
+      justify-content:space-between;
+      align-items:baseline;
+      margin:0 0 10px 0;
+      user-select:none;
+      opacity:.95;
     }
-    .hud small { opacity: 0.7; }
-    canvas {
-      width: 100%;
-      height: auto;
-      background: #121216;
-      border: 1px solid #2a2a33;
-      border-radius: 14px;
-      display: block;
+    .hud small{ opacity:.7; }
+    canvas{
+      width:100%;
+      height:auto;
+      border-radius:16px;
+      border:1px solid #2a2a33;
+      background:#111;
+      display:block;
     }
-    .hint { margin-top: 10px; color: #cfcfd6; opacity: 0.7; user-select: none; }
-    kbd { background:#1b1b22; border:1px solid #2a2a33; padding:2px 8px; border-radius:8px; }
+    .hint{
+      margin-top:10px;
+      opacity:.7;
+      user-select:none;
+      font-size:14px;
+    }
+    kbd{ background:#14141a; border:1px solid #2a2a33; padding:2px 8px; border-radius:8px; }
   </style>
 </head>
 <body>
@@ -43,11 +48,7 @@
       <div><strong>Stephen Runner</strong> <small id="status"></small></div>
       <div>Score: <strong id="score">0</strong></div>
     </div>
-    <canvas id="game" width="900" height="260"></canvas>
-    <div class="hint">Jump: <kbd>Space</kbd> or <kbd>↑</kbd> • Restart: <kbd>R</kbd> • (Tap to jump on mobile)</div>
-  </div>
 
-  <script src="./game.js"></script>
-</body>
-</html>
+    <canvas id="game" wid
+
 
