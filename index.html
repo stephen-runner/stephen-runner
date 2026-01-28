@@ -2,130 +2,52 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Stephen Runner</title>
   <style>
+    :root { color-scheme: dark; }
     body {
       margin: 0;
-      background: #111;
-      display: flex;
-      justify-content: center;
-      align-items: center;
+      background: #0b0b0c;
       height: 100vh;
-      font-family: Arial, sans-serif;
-      color: white;
+      display: grid;
+      place-items: center;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
     }
+    .wrap { width: min(920px, 96vw); }
+    .hud {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin: 0 0 10px 0;
+      color: #eaeaea;
+      opacity: 0.9;
+      user-select: none;
+    }
+    .hud small { opacity: 0.7; }
     canvas {
-      background: #222;
-      border: 2px solid #444;
+      width: 100%;
+      height: auto;
+      background: #121216;
+      border: 1px solid #2a2a33;
+      border-radius: 14px;
+      display: block;
     }
+    .hint { margin-top: 10px; color: #cfcfd6; opacity: 0.7; user-select: none; }
+    kbd { background:#1b1b22; border:1px solid #2a2a33; padding:2px 8px; border-radius:8px; }
   </style>
 </head>
 <body>
-  <canvas id="game" width="800" height="200"></canvas>
+  <div class="wrap">
+    <div class="hud">
+      <div><strong>Stephen Runner</strong> <small id="status"></small></div>
+      <div>Score: <strong id="score">0</strong></div>
+    </div>
+    <canvas id="game" width="900" height="260"></canvas>
+    <div class="hint">Jump: <kbd>Space</kbd> or <kbd>↑</kbd> • Restart: <kbd>R</kbd> • (Tap to jump on mobile)</div>
+  </div>
 
-  <script>
-    const canvas = document.getElementById("game");
-    const ctx = canvas.getContext("2d");
-
-    let stephen = { x: 80, y: 140, w: 20, h: 40, vy: 0, onGround: true };
-    let stones = [];
-    let score = 0;
-    let gameOver = false;
-
-    const quotes = [
-      "Jesus is Lord.",
-      "I see the heavens opened.",
-      "Father, forgive them.",
-      "You cannot silence the truth."
-    ];
-
-    let currentQuote = "";
-    let quoteTimer = 0;
-
-    function spawnStone() {
-      stones.push({ x: canvas.width, y: 155, r: 6 });
-    }
-
-    setInterval(spawnStone, 1500);
-
-    document.addEventListener("keydown", e => {
-      if (e.code === "Space" && stephen.onGround && !gameOver) {
-        stephen.vy = -10;
-        stephen.onGround = false;
-      }
-    });
-
-    function update() {
-      if (gameOver) return;
-
-      stephen.vy += 0.5;
-      stephen.y += stephen.vy;
-
-      if (stephen.y >= 140) {
-        stephen.y = 140;
-        stephen.vy = 0;
-        stephen.onGround = true;
-      }
-
-      stones.forEach(s => s.x -= 4);
-      stones = stones.filter(s => s.x > -10);
-
-      stones.forEach(s => {
-        if (
-          s.x < stephen.x + stephen.w &&
-          s.x + s.r > stephen.x &&
-          s.y < stephen.y + stephen.h
-        ) {
-          gameOver = true;
-        }
-      });
-
-      score++;
-
-      if (quoteTimer <= 0 && Math.random() < 0.01) {
-        currentQuote = quotes[Math.floor(Math.random() * quotes.length)];
-        quoteTimer = 120;
-      }
-
-      quoteTimer--;
-    }
-
-    function draw() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      ctx.fillStyle = "white";
-      ctx.fillRect(stephen.x, stephen.y, stephen.w, stephen.h);
-
-      ctx.fillStyle = "gray";
-      stones.forEach(s => {
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-        ctx.fill();
-      });
-
-      if (currentQuote) {
-        ctx.fillStyle = "white";
-        ctx.fillRect(stephen.x - 5, stephen.y - 30, 160, 22);
-        ctx.fillStyle = "black";
-        ctx.fillText(currentQuote, stephen.x + 2, stephen.y - 15);
-      }
-
-      ctx.fillStyle = "white";
-      ctx.fillText("Score: " + score, 10, 20);
-
-      if (gameOver) {
-        ctx.font = "20px Arial";
-        ctx.fillText("You have been martyred.", 300, 100);
-      }
-    }
-
-    function loop() {
-      update();
-      draw();
-      requestAnimationFrame(loop);
-    }
-
-    loop();
-  </script>
+  <script src="./game.js"></script>
 </body>
 </html>
+
