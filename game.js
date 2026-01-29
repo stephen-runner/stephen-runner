@@ -65,9 +65,9 @@
   // Optional: Assets/Stone.png (small rock). If missing, we draw a simple rock.
   // ===========
   const ASSET = {
-    stephen: "Assets/StephenPixel.png",
-    thrower: "Assets/StoneThrower.png",
-    stone:   "Assets/Stone.png"
+    stephen: "/Assets/StephenPixel.png",
+    thrower: "/Assets/StoneThrower.png",
+    stone:   "/Assets/Stone.png"
   };
 
   // ===========
