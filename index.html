@@ -1,138 +1,55 @@
-<!DOCTYPE html> 
+<!-- index.html -->
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Stephen Runner</title>
-  <style>
-    :root { color-scheme: dark; }
-    body{
-      margin:0;
-      background:#070709;
-      min-height:100vh;
-      display:grid;
-      place-items:center;
-      font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
-      color:#eaeaea;
-    }
-    .wrap{ width:min(1200px, 96vw); }
-    .hud{
-      display:flex;
-      justify-content:space-between;
-      align-items:center;
-      gap:12px;
-      margin:0 0 10px 0;
-      user-select:none;
-      opacity:.95;
-    }
-    .leftHUD{
-      display:flex;
-      align-items:center;
-      gap:10px;
-      flex-wrap:wrap;
-    }
-    .btn{
-      background:#14141a;
-      border:1px solid #2a2a33;
-      color:#eaeaea;
-      padding:6px 10px;
-      border-radius:10px;
-      cursor:pointer;
-      font-weight:600;
-      font-size:14px;
-    }
-    .btn:hover{ border-color:#4a4a66; }
-    canvas{
-      width:100%;
-      height:auto;
-      border-radius:18px;
-      border:1px solid #2a2a33;
-      background:#111;
-      display:block;
-      box-shadow: 0 20px 60px rgba(0,0,0,.45);
-    }
-    .hint{
-      margin-top:10px;
-      opacity:.75;
-      user-select:none;
-      font-size:14px;
-    }
-    kbd{ background:#14141a; border:1px solid #2a2a33; padding:2px 8px; border-radius:8px; }
-
-    /* Hall of Fame modal */
-    .modalBackdrop{
-      position:fixed; inset:0;
-      background:rgba(0,0,0,.62);
-      display:none;
-      align-items:center;
-      justify-content:center;
-      padding:18px;
-      z-index:9999;
-    }
-    .modal{
-      width:min(900px, 96vw);
-      max-height:min(80vh, 720px);
-      overflow:auto;
-      background:#0e0e12;
-      border:1px solid #2a2a33;
-      border-radius:18px;
-      padding:18px 18px 14px;
-    }
-    .modalTop{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:10px;
-      margin-bottom:12px;
-    }
-    .modal h2{ margin:0; font-size:18px; }
-    .timeline{
-      display:flex;
-      flex-direction:column;
-      gap:10px;
-      padding:8px 2px 4px;
-    }
-    .card{
-      background:#121218;
-      border:1px solid #262635;
-      border-radius:14px;
-      padding:12px 12px;
-    }
-    .card .title{ font-weight:800; margin-bottom:4px; }
-    .card .desc{ opacity:.86; line-height:1.35; }
-    .muted{ opacity:.7; font-size:13px; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stephen Runner</title>
+<style>
+body{margin:0;background:#070709;display:grid;place-items:center;font-family:system-ui;color:#eaeaea}
+canvas{background:#111;border:1px solid #2a2a33;border-radius:16px}
+</style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="hud">
-      <div class="leftHUD">
-        <div><strong>Stephen Runner</strong> <span class="muted" id="status"></span></div>
-        <button class="btn" id="hofBtn">Hall of Fame</button>
-      </div>
-      <div>Score: <strong id="score">0</strong> <span class="muted">• Best: <span id="best">0</span></span></div>
-    </div>
-
-    <!-- Bigger game canvas -->
-    <canvas id="game" width="1100" height="520"></canvas>
-
-    <div class="hint">
-      Jump: <kbd>Space</kbd> / <kbd>↑</kbd> • Glide: hold <kbd>Space</kbd> (short + cooldown) • Restart: <kbd>R</kbd> • Mobile: tap to jump
-    </div>
-  </div>
-
-  <!-- Hall of Fame Modal -->
-  <div class="modalBackdrop" id="hofBackdrop" aria-hidden="true">
-    <div class="modal" role="dialog" aria-modal="true">
-      <div class="modalTop">
-        <h2>Hall of Fame — Stephen’s Timeline</h2>
-        <button class="btn" id="hofClose">Close</button>
-      </div>
-      <div class="muted">From first to greatest.</div>
-      <div class="timeline" id="hofTimeline"></div>
-    </div>
-  </div>
-
-  <script src="game.js"></script>
+<canvas id="game" width="1100" height="520"></canvas>
+<script src="game.js"></script>
 </body>
 </html>
+/* =========================
+game.js
+========================= */
+const BASE_PATH = "/stephen-runner/Assets/";
+const ASSET = {
+stephen: BASE_PATH + "StephenPixel.png",
+thrower: BASE_PATH + "StoneThrower.png",
+stone: BASE_PATH + "Stone.png"
+};
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+ctx.imageSmoothingEnabled = false;
+const W = canvas.width;
+const H = canvas.height;
+const GROUND_Y = Math.floor(H * 0.78);
+const player = { x:200, y:GROUND_Y-56, w:56, h:56 };
+const images = {};
+function load(name, src){
+return new Promise(res=>{
+const i=new Image();
+i.onload=()=>{images[name]=i;res(true)};
+i.onerror=()=>res(false);
+i.src=src;
+});
+}
+Promise.all([
+load("stephen", ASSET.stephen),
+load("thrower", ASSET.thrower),
+load("stone", ASSET.stone)
+]).then(ok=>{
+console.log("Assets loaded:", ok);
+draw();
+});
+function draw(){
+ctx.clearRect(0,0,W,H);
+if(images.stephen){
+ctx.drawImage(images.stephen, player.x, player.y, player.w, player.h);
+}
