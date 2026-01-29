@@ -17,29 +17,28 @@ const ctx = canvas.getContext("2d");
 ctx.imageSmoothingEnabled = false;
 const W = canvas.width;
 const H = canvas.height;
-// Ground line stays consistent even when screen is "bigger"
-const GROUND_Y = Math.floor(H * 0.78);
+// Ground at bottom for more sky
+const GROUND_Y = H - 68;
 // Speed
-let GAME_SPEED = 520; const SPEED_RAMP = 8; // px/sec world scroll speed
-// speed increases slowly over time
-// Physics
+let GAME_SPEED = 520; const SPEED_RAMP = 8; // Physics
 const GRAVITY = 2200; const JUMP_V = 920; const MAX_FALL = 1600;
 // px/sec^2
 // jump impulse
 // Stones
-const STONE_SPEED = 760; const STONE_SIZE = 18; const STONE_Y_OFFSET = 34; // px/sec (flying stones)
-// smaller stones
-// relative to thrower top
-// Spawn
-const THROWER_SPAWN_MIN = 1.2; const THROWER_SPAWN_MAX = 2.1; // seconds
-// seconds
-// Speech
+const STONE_SPEED = 760; const STONE_SIZE = 18; // Spawn
+const THROWER_SPAWN_MIN = 1.2; const THROWER_SPAWN_MAX = 2.1; // Speech
 const LINES = [
 "Jesus is Lord.",
 "My hope is in Christ.",
 "You cannot silence the truth.",
 "I will not deny Him.",
 "Lord, forgive them."
+// px/sec world scroll speed
+// speed increases slowly over time
+// px/sec (stone speed relative to thrower)
+// smaller stones
+// seconds
+// seconds
 ];
 // =====================
 // SPRITE SHEET SETTINGS
@@ -47,17 +46,20 @@ const LINES = [
 const StephenSprite = {
 frameW: 64,
 frameH: 64,
-frames: 6, row: 0,
+frames: 6,
+row: 0,
 fps: 12
-// running frames in first row
 };
 const ThrowerSprite = {
-frameW: 64,
-frameH: 64,
-frames: 4, // 4 frames across
-variants: 3, // 3 rows
+frameW: 64, // fallback only
+frameH: 64, // fallback only
+frames: 4,
+variants: 3,
 fps: 10
 };
+// Auto-detected thrower frame sizes (fixes invisible throwers)
+let THROW_FW = ThrowerSprite.frameW;
+let THROW_FH = ThrowerSprite.frameH;
 // =====================
 // STATE
 // =====================
@@ -148,6 +150,11 @@ loadImage(ASSET.stone)
 stephenImg = a.img; haveStephen = a.ok;
 throwerImg = b.img; haveThrower = b.ok;
 stoneImg = c.img; haveStone = c.ok;
+// Auto-detect thrower frame dimensions from the actual PNG
+if (haveThrower){
+THROW_FW = Math.floor(throwerImg.width / ThrowerSprite.frames);
+THROW_FH = Math.floor(throwerImg.height / ThrowerSprite.variants);
+}
 reset(true);
 loop(performance.now());
 });
@@ -197,7 +204,6 @@ player.sayT = 0;
 player.sayText = "";
 player.glideT = 0;
 player.glideCooldown = 0;
-// HARD ANCHOR to ground
 player.y = GROUND_Y - player.h;
 throwers.length = 0;
 stones.length = 0;
@@ -225,12 +231,14 @@ variant: Math.floor(Math.random() * ThrowerSprite.variants),
 }
 function spawnStoneFromThrower(t){
 const size = STONE_SIZE;
-const stoneY = t.y + STONE_Y_OFFSET;
+// Lower stone spawn: hand-height
+const stoneY = t.y + Math.floor(t.h * 0.74);
 stones.push({
 x: t.x + 10,
 y: stoneY,
 size,
-vx: -STONE_SPEED,
+// IMPORTANT: world-space projectile speed includes current world speed once at spawn
+vx: -(STONE_SPEED + GAME_SPEED),
 wobbleP: Math.random() * Math.PI * 2
 });
 }
@@ -239,16 +247,13 @@ wobbleP: Math.random() * Math.PI * 2
 // =====================
 function update(dt){
 if (!running || dead) return;
-// speed ramp
 GAME_SPEED += SPEED_RAMP * dt;
-// score
 score += Math.floor(120 * dt);
 scoreEl.textContent = String(score);
 // PLAYER PHYSICS
 player.vy += GRAVITY * dt;
 if (player.vy > MAX_FALL) player.vy = MAX_FALL;
 player.y += player.vy * dt;
-// HARD GROUND CLAMP
 const groundY = GROUND_Y - player.h;
 if (player.y >= groundY){
 player.y = groundY;
@@ -288,7 +293,6 @@ const tStep = 1 / ThrowerSprite.fps;
 if (t.animT >= tStep){
 t.animT -= tStep;
 t.frame = (t.frame + 1) % ThrowerSprite.frames;
-// Throw at frame 2
 if (t.frame === 2 && !t.hasThrown){
 spawnStoneFromThrower(t);
 t.hasThrown = true;
@@ -296,17 +300,16 @@ t.hasThrown = true;
 }
 }
 while (throwers.length && throwers[0].x < -200) throwers.shift();
-// UPDATE STONES (RESTORED: no double world scroll)
-// Old broken line was: s.x += (s.vx - GAME_SPEED) * dt;
-// Restored line: stones move by their own velocity only.
+// UPDATE STONES (no double scroll)
 for (const s of stones){
 s.x += s.vx * dt;
 s.wobbleP += dt * 10;
 s.y += Math.sin(s.wobbleP) * 0.10;
 }
 while (stones.length && stones[0].x < -200) stones.shift();
-// COLLISION
-const px = player.x, py = player.y, pw = player.w, ph = player.h;
+// COLLISION (tight inset so it actually kills when it hits)
+const inset = 2;
+const px = player.x + inset, py = player.y + inset, pw = player.w - inset*2, ph = player.h - inset*2;
 for (const s of stones){
 if (rectHit(px, py, pw, ph, s.x, s.y, s.size, s.size)){
 die();
@@ -328,37 +331,28 @@ statusEl.textContent = "— YOU HAVE BEEN MARTYRED (tap / R to restart)";
 // DRAW
 // =====================
 function draw(){
-// background gradient (desert)
 const g = ctx.createLinearGradient(0,0,0,H);
 g.addColorStop(0, "#3b3140");
 g.addColorStop(0.55, "#6e4b3f");
 g.addColorStop(1, "#a97945");
 ctx.fillStyle = g;
 ctx.fillRect(0,0,W,H);
-// haze
 ctx.fillStyle = "rgba(10,10,12,0.22)";
 ctx.fillRect(0,0,W,H);
-// ground
+// ground (now near bottom)
 ctx.fillStyle = "rgba(20,14,10,0.18)";
 ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
-// ground line
 ctx.strokeStyle = "rgba(0,0,0,0.28)";
 ctx.lineWidth = 3;
 ctx.beginPath();
 ctx.moveTo(0, GROUND_Y);
 ctx.lineTo(W, GROUND_Y);
 ctx.stroke();
-// dunes
 drawDunes();
-// draw throwers
 drawThrowers();
-// draw stones
 drawStones();
-// draw player
 drawPlayer();
-// speech bubble
 if (player.sayText) drawSpeech(player.sayText);
-// start overlay
 if (!running && !dead){
 ctx.fillStyle = "rgba(0,0,0,0.35)";
 ctx.fillRect(0,0,W,H);
@@ -370,7 +364,6 @@ ctx.font = "16px system-ui, -apple-system, Segoe UI, Roboto, Arial";
 ctx.fillStyle = "rgba(255,255,255,0.75)";
 ctx.fillText("Endure. Jump the stones. Speak the truth.", W/2, H/2 + 34);
 }
-// death overlay
 if (dead){
 ctx.fillStyle = "rgba(0,0,0,0.46)";
 ctx.fillRect(0,0,W,H);
@@ -382,14 +375,11 @@ ctx.font = "16px system-ui, -apple-system, Segoe UI, Roboto, Arial";
 ctx.fillStyle = "rgba(255,255,255,0.8)";
 ctx.fillText("Tap or press R to restart", W/2, H/2 + 34);
 }
-// debug
 if (debug){
 ctx.strokeStyle = "rgba(0,255,120,0.8)";
 ctx.lineWidth = 2;
 ctx.strokeRect(player.x, player.y, player.w, player.h);
-for (const s of stones){
-ctx.strokeRect(s.x, s.y, s.size, s.size);
-}
+for (const s of stones) ctx.strokeRect(s.x, s.y, s.size, s.size);
 for (const t of throwers){
 ctx.strokeStyle = "rgba(120,170,255,0.75)";
 ctx.strokeRect(t.x, t.y, t.w, t.h);
@@ -397,23 +387,22 @@ ctx.strokeRect(t.x, t.y, t.w, t.h);
 }
 }
 function drawDunes(){
-// far dunes
+// Push dunes down too (so more sky)
 ctx.fillStyle = "rgba(255,220,160,0.08)";
 const t = performance.now() / 1000;
 const shift = (t * 18) % W;
 for (let i=0;i<8;i++){
 const x = i*160 - shift;
 ctx.beginPath();
-ctx.ellipse(x+80, GROUND_Y-160, 140, 60, 0, 0, Math.PI*2);
+ctx.ellipse(x+80, GROUND_Y-220, 140, 60, 0, 0, Math.PI*2);
 ctx.fill();
 }
-// near dunes
 ctx.fillStyle = "rgba(0,0,0,0.09)";
 const shift2 = (t * 46) % W;
 for (let i=0;i<10;i++){
 const x = i*140 - shift2;
 ctx.beginPath();
-ctx.ellipse(x+70, GROUND_Y-70, 120, 48, 0, 0, Math.PI*2);
+ctx.ellipse(x+70, GROUND_Y-110, 120, 48, 0, 0, Math.PI*2);
 ctx.fill();
 }
 }
@@ -423,12 +412,7 @@ if (haveStephen){
 const fw = StephenSprite.frameW, fh = StephenSprite.frameH;
 const sx = (player.animF % StephenSprite.frames) * fw;
 const sy = StephenSprite.row * fh;
-ctx.drawImage(
-stephenImg,
-sx, sy, fw, fh,
-x, y - 6,
-player.w, player.h
-);
+ctx.drawImage(stephenImg, sx, sy, fw, fh, x, y - 6, player.w, player.h);
 } else {
 ctx.fillStyle = "#eaeaea";
 ctx.fillRect(x, y, player.w, player.h);
@@ -437,15 +421,10 @@ ctx.fillRect(x, y, player.w, player.h);
 function drawThrowers(){
 for (const t of throwers){
 if (haveThrower){
-const fw = ThrowerSprite.frameW, fh = ThrowerSprite.frameH;
+const fw = THROW_FW, fh = THROW_FH;
 const sx = t.frame * fw;
 const sy = t.variant * fh;
-ctx.drawImage(
-throwerImg,
-sx, sy, fw, fh,
-Math.floor(t.x), Math.floor(t.y) - 4,
-t.w, t.h
-);
+ctx.drawImage(throwerImg, sx, sy, fw, fh, Math.floor(t.x), Math.floor(t.y) - 4, t.w, t.h);
 } else {
 ctx.fillStyle = "rgba(220,220,220,0.6)";
 ctx.fillRect(t.x, t.y, t.w, t.h);
@@ -468,15 +447,11 @@ ctx.lineTo(x + size*0.62, y + size*0.85);
 ctx.lineTo(x + size*0.25, y + size*0.78);
 ctx.closePath();
 ctx.fill();
-ctx.fillStyle = "rgba(0,0,0,0.18)";
-ctx.beginPath();
-ctx.fill();
-ctx.ellipse(x + size*0.60, y + size*0.50, size*0.18, size*0.14, 0, 0, Math.PI*2);
 }
 }
 }
 function drawSpeech(text){
-const padX = 14, padY = 10;
+const padX = 14;
 ctx.font = "600 18px system-ui, -apple-system, Segoe UI, Roboto, Arial";
 const metrics = ctx.measureText(text);
 const bw = Math.ceil(metrics.width + padX*2);
@@ -484,7 +459,6 @@ const bh = 34;
 const bx = Math.floor(player.x + player.w*0.30);
 const by = Math.floor(player.y - 44);
 roundRect(ctx, bx, by, bw, bh, 10, "rgba(240,235,225,0.95)", "rgba(0,0,0,0.25)");
-// tail
 ctx.fillStyle = "rgba(240,235,225,0.95)";
 ctx.beginPath();
 ctx.moveTo(bx + 24, by + bh);
@@ -492,7 +466,6 @@ ctx.lineTo(bx + 34, by + bh);
 ctx.lineTo(bx + 26, by + bh + 10);
 ctx.closePath();
 ctx.fill();
-// text
 ctx.fillStyle = "rgba(20,20,22,0.95)";
 ctx.textAlign = "left";
 ctx.textBaseline = "middle";
