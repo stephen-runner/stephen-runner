@@ -22,7 +22,6 @@
       justify-content: space-between;
       margin-bottom: 10px;
       opacity: 0.95;
-      user-select: none;
     }
     canvas {
       width: 100%;
@@ -30,18 +29,11 @@
       border: 1px solid #2a2a33;
       background: #111;
       display: block;
-      box-shadow: 0 20px 60px rgba(0,0,0,.45);
     }
     .hint {
       margin-top: 10px;
       font-size: 14px;
       opacity: 0.7;
-    }
-    kbd {
-      background: #14141a;
-      border: 1px solid #2a2a33;
-      padding: 2px 8px;
-      border-radius: 8px;
     }
   </style>
 </head>
@@ -50,7 +42,7 @@
     <div class="hud">
       <div>
         <strong>Stephen Runner</strong>
-        <small id="status">— press Space to begin</small>
+        <small id="status">— loading…</small>
       </div>
       <div>
         Score: <strong id="score">0</strong>
@@ -61,11 +53,11 @@
     <canvas id="game" width="1100" height="520"></canvas>
 
     <div class="hint">
-      Jump: <kbd>Space</kbd> / <kbd>↑</kbd> • Restart: <kbd>R</kbd>
+      Jump: Space / ↑ • Restart: R
     </div>
   </div>
 
-  <!-- IMPORTANT: game.js only -->
-    <script src="game.js?v=FINAL-1" defer></script>
+  <!-- ONLY script on the page -->
+  <script src="game.js?v=RESET-1"></script>
 </body>
 </html>
