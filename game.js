@@ -30,20 +30,39 @@ function loadImage(src){
   });
 }
 
-/* SPRITE CROPS — matched to your images */
+/* Auto-scale crop rectangles if your exported PNG sizes changed */
+function scaledCrop(img, frame, expectedW, expectedH){
+  const sxScale = img.width  / expectedW;
+  const syScale = img.height / expectedH;
+  return [
+    Math.round(frame[0] * sxScale),
+    Math.round(frame[1] * syScale),
+    Math.round(frame[2] * sxScale),
+    Math.round(frame[3] * syScale),
+  ];
+}
+
+/* SPRITE CROPS — measured from the images you posted */
 const STEPHEN_FRAMES=[
-  [225,456,225,514],
-  [752,456,306,489],
-  [1392,374,279,503]
+  [225,456,225,514],   // idle
+  [752,456,306,489],   // run
+  [1392,374,279,503]   // jump
 ];
 
 const THROWER_FRAMES=[
   [304,480,198,402],
   [711,481,188,402],
-  [1234,480,222,403],
+  [1234,480,222,403],  // release (throw here)
   [1730,482,216,401]
 ];
 const THROW_ON=2;
+
+/* Expected sizes for the originals (scaledCrop adapts if yours differ) */
+const STEPHEN_EXPECTED_W = 1536;
+const STEPHEN_EXPECTED_H = 1024;
+
+const THROWER_EXPECTED_W = 2048;
+const THROWER_EXPECTED_H = 1024;
 
 /* GAME TUNING */
 let WORLD_SPEED=460;
@@ -96,6 +115,10 @@ Promise.all([
   stephenImg=a.img; haveStephen=a.ok;
   throwerImg=b.img; haveThrower=b.ok;
   stoneImg=c.img; haveStone=c.ok;
+
+  // Uncomment if you want to verify real sizes in console:
+  // console.log("Stephen size:", stephenImg?.width, stephenImg?.height, "Thrower size:", throwerImg?.width, throwerImg?.height);
+
   reset();
 });
 
@@ -234,29 +257,42 @@ function draw(){
   ctx.lineTo(W,GROUND_Y);
   ctx.stroke();
 
+  // Throwers
   for(const t of throwers){
-    const f=THROWER_FRAMES[t.frame];
+    if(!haveThrower) continue;
+
+    const raw = THROWER_FRAMES[t.frame];
+    const f = scaledCrop(throwerImg, raw, THROWER_EXPECTED_W, THROWER_EXPECTED_H);
+
     const s=100/f[3];
     const dw=f[2]*s, dh=f[3]*s;
     const y=GROUND_Y-dh;
-    if(haveThrower) ctx.drawImage(throwerImg,f[0],f[1],f[2],f[3],t.x,y,dw,dh);
+
+    ctx.drawImage(throwerImg, f[0],f[1],f[2],f[3], t.x, y, dw, dh);
   }
 
+  // Stones
   for(const s of stones){
     if(haveStone) ctx.drawImage(stoneImg,s.x,s.y,STONE_SIZE,STONE_SIZE);
   }
 
+  // Player (scaled-crop)
   const idx=!player.grounded?2:(player.animF?1:0);
-  const f=STEPHEN_FRAMES[idx];
-  const s=player.baseH/f[3];
-  const dw=f[2]*s, dh=f[3]*s;
-  const px=player.x, py=GROUND_Y-dh+player.jump;
-  if(haveStephen) ctx.drawImage(stephenImg,f[0],f[1],f[2],f[3],px,py,dw,dh);
+  if(haveStephen){
+    const raw = STEPHEN_FRAMES[idx];
+    const f = scaledCrop(stephenImg, raw, STEPHEN_EXPECTED_W, STEPHEN_EXPECTED_H);
 
-  player.hit.x=px+dw*.33;
-  player.hit.y=py+dh*.12;
-  player.hit.w=dw*.4;
-  player.hit.h=dh*.78;
+    const s=player.baseH/f[3];
+    const dw=f[2]*s, dh=f[3]*s;
+    const px=player.x, py=GROUND_Y-dh+player.jump;
+
+    ctx.drawImage(stephenImg, f[0],f[1],f[2],f[3], px, py, dw, dh);
+
+    player.hit.x=px+dw*.33;
+    player.hit.y=py+dh*.12;
+    player.hit.w=dw*.4;
+    player.hit.h=dh*.78;
+  }
 
   if(!running&&!dead){
     ctx.fillStyle="rgba(0,0,0,.35)";
