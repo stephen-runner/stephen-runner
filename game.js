@@ -1,3 +1,5 @@
+alert("game.js loaded");
+
 (() => {
   const statusEl = document.getElementById("status");
   const scoreEl  = document.getElementById("score");
