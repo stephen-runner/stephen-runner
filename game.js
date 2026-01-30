@@ -1,5 +1,3 @@
-alert("game.js loaded");
-
 (() => {
   const statusEl = document.getElementById("status");
   const scoreEl  = document.getElementById("score");
@@ -9,67 +7,71 @@ alert("game.js loaded");
 
   ctx.imageSmoothingEnabled = false;
 
-  // Show runtime errors on the page (so you aren't blind)
+  // Put any runtime error directly on screen
   window.addEventListener("error", (e) => {
     statusEl.textContent = `— JS ERROR: ${e.message}`;
   });
 
-  // If this line doesn't show, game.js is not loading at all.
-  statusEl.textContent = "— game.js loaded (press Space)";
+  const W = canvas.width;
+  const H = canvas.height;
 
-  const W = canvas.width, H = canvas.height;
+  // Ground line (hard anchored)
   const GROUND_Y = Math.floor(H * 0.80);
 
-  // Assets (case-sensitive)
+  // Assets (match your repo EXACTLY)
   const BASE = new URL("./", location.href);
   const ASSET = {
     stephen: new URL("Assets/StephenPixel.png", BASE).href,
     stone:   new URL("Assets/Stone.png", BASE).href,
-    thrower: new URL("Assets/stonethrower.png", BASE).href, // lowercase per your repo
+    thrower: new URL("Assets/stonethrower.png", BASE).href
   };
 
   function loadImage(src){
     return new Promise((resolve) => {
       const img = new Image();
-      img.onload = () => resolve({ img, ok:true, src });
-      img.onerror = () => resolve({ img:null, ok:false, src });
+      img.onload = () => resolve({ img, ok:true });
+      img.onerror = () => resolve({ img:null, ok:false });
       img.src = src;
     });
   }
 
-  // Game tuning
+  // Difficulty (fair)
   let WORLD_SPEED = 480;
   const WORLD_RAMP = 7;
-  const WORLD_CAP = 760;
+  const WORLD_CAP  = 760;
 
-  const GRAVITY = 2350;
-  const JUMP_V = 980;
+  // Player physics (grounded)
+  const GRAVITY  = 2350;
+  const JUMP_V   = 980;
   const MAX_FALL = 1700;
 
+  // Spawns
   const THROWER_SPAWN_MIN = 1.25;
   const THROWER_SPAWN_MAX = 2.10;
 
-  const STONE_SPEED = 520;
-  const STONE_SIZE = 18;
-  const STONE_THROW_Y = 22;
+  // Stones (jumpable height)
+  const STONE_SPEED = 520;      // extra speed beyond world scroll
+  const STONE_SIZE  = 18;
+  const STONE_THROW_Y = 22;     // relative to thrower top
   const STONE_HITBOX_PAD = 3;
 
+  // Sprites
   const StephenSprite = { frameW:64, frameH:64, frames:6, row:0, fps:12 };
-  const ThrowerSprite = { frameW:64, frameH:64, frames:4, fps:10, throwFrame:2 };
+  const ThrowerSprite = { frameW:64, frameH:64, frames:4, fps:10, throwFrame:2 }; // 1 row only
 
   // Best score
   const BEST_KEY = "stephenRunnerBest";
   let best = Number(localStorage.getItem(BEST_KEY) || 0);
   bestEl.textContent = String(best);
 
-  // State
+  // Game state
   let running = false;
   let dead = false;
   let score = 0;
 
   const player = {
     x: Math.floor(W * 0.18),
-    y: GROUND_Y - 56,
+    y: (GROUND_Y - 56),
     w: 56,
     h: 56,
     vy: 0,
@@ -86,12 +88,14 @@ alert("game.js loaded");
   let stephenImg=null, throwerImg=null, stoneImg=null;
   let haveStephen=false, haveThrower=false, haveStone=false;
 
+  // Start with a visible status
+  statusEl.textContent = "— loading assets… (press Space when ready)";
+
   Promise.all([
     loadImage(ASSET.stephen),
     loadImage(ASSET.thrower),
     loadImage(ASSET.stone)
-  ]).then((res) => {
-    const [a,b,c] = res;
+  ]).then(([a,b,c]) => {
     stephenImg = a.img; haveStephen = a.ok;
     throwerImg = b.img; haveThrower = b.ok;
     stoneImg   = c.img; haveStone   = c.ok;
@@ -208,7 +212,7 @@ alert("game.js loaded");
       player.grounded = false;
     }
 
-    // Anim
+    // Player animation
     player.animT += dt;
     const step = 1 / StephenSprite.fps;
     if (player.animT >= step){
@@ -223,7 +227,7 @@ alert("game.js loaded");
       nextThrowerIn = rand(THROWER_SPAWN_MIN, THROWER_SPAWN_MAX);
     }
 
-    // Throwers animate + throw
+    // Throwers move + animate + throw once
     for (const t of throwers){
       t.x -= WORLD_SPEED * dt;
 
@@ -236,7 +240,7 @@ alert("game.js loaded");
         if (t.frame === ThrowerSprite.throwFrame && !t.hasThrown){
           spawnStoneFromThrower(t);
           t.hasThrown = true;
-          t.animT = -0.04;
+          t.animT = -0.04; // tiny pause on release
         }
       }
     }
@@ -250,7 +254,7 @@ alert("game.js loaded");
     }
     while (stones.length && stones[0].x < -220) stones.shift();
 
-    // Collision
+    // Collision (instant martyr)
     const px = player.x, py = player.y, pw = player.w, ph = player.h;
     for (const s of stones){
       const pad = STONE_HITBOX_PAD;
@@ -263,7 +267,7 @@ alert("game.js loaded");
   }
 
   function draw(){
-    // If you still see a black screen with this draw(), JS isn't running.
+    // Always draw something (proves loop is running)
     const g = ctx.createLinearGradient(0,0,0,H);
     g.addColorStop(0, "#3a2f3f");
     g.addColorStop(0.55, "#6f4a3e");
@@ -288,6 +292,7 @@ alert("game.js loaded");
     drawStones();
     drawPlayer();
 
+    // Start overlay
     if (!running && !dead){
       ctx.fillStyle = "rgba(0,0,0,0.35)";
       ctx.fillRect(0,0,W,H);
@@ -297,6 +302,7 @@ alert("game.js loaded");
       ctx.fillText("Press Space to begin", W/2, H/2);
     }
 
+    // Death overlay
     if (dead){
       ctx.fillStyle = "rgba(0,0,0,0.46)";
       ctx.fillRect(0,0,W,H);
@@ -348,7 +354,7 @@ alert("game.js loaded");
     }
   }
 
-  // Loop
+  // Main loop
   let last = 0;
   function loop(t){
     requestAnimationFrame(loop);
