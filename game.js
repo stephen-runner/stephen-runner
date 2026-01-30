@@ -3,19 +3,25 @@
   const scoreEl  = document.getElementById("score");
   const bestEl   = document.getElementById("best");
   const canvas   = document.getElementById("game");
-  const ctx      = canvas.getContext("2d");
+
+  if (!canvas) {
+    document.body.style.background = "#070709";
+    document.body.style.color = "#eaeaea";
+    document.body.innerHTML = "<h1 style='font-family:system-ui'>Canvas missing (index.html is wrong)</h1>";
+    return;
+  }
+
+  const ctx = canvas.getContext("2d");
   ctx.imageSmoothingEnabled = false;
 
-  // Show errors on screen (so you never go blind again)
-  window.addEventListener("error", (e) => {
-    if (statusEl) statusEl.textContent = `— JS ERROR: ${e.message}`;
-  });
+  function setStatus(t){ if (statusEl) statusEl.textContent = t; }
 
-  const W = canvas.width;
-  const H = canvas.height;
+  window.addEventListener("error", (e) => setStatus(`— JS ERROR: ${e.message}`));
+
+  const W = canvas.width, H = canvas.height;
   const GROUND_Y = Math.floor(H * 0.80);
 
-  // ===== ASSETS (your exact filenames) =====
+  // Assets (exact filenames)
   const BASE = new URL("./", location.href);
   const ASSET = {
     stephen: new URL("Assets/StephenPixel.png", BASE).href,
@@ -32,24 +38,22 @@
     });
   }
 
-  // ===== IMPORTANT: Crop frames for YOUR images =====
-  // These rectangles were derived from the images you posted.
-  // Format: [sx, sy, sw, sh]
+  // Crops for your posted images (format: [sx,sy,sw,sh])
   const STEPHEN_FRAMES = [
-    [225, 456, 225, 514],  // idle
-    [752, 456, 306, 489],  // run
-    [1392, 374, 279, 503], // jump
+    [225, 456, 225, 514],   // idle
+    [752, 456, 306, 489],   // run
+    [1392, 374, 279, 503],  // jump
   ];
 
   const THROWER_FRAMES = [
     [304, 480, 198, 402],
     [711, 481, 188, 402],
-    [1234, 480, 222, 403], // release frame (we throw on this one)
+    [1234, 480, 222, 403],  // release
     [1730, 482, 216, 401],
   ];
   const THROW_ON_INDEX = 2;
 
-  // ===== GAME TUNING (fair) =====
+  // Tuning
   let WORLD_SPEED = 460;
   const WORLD_RAMP = 7;
   const WORLD_CAP  = 740;
@@ -61,18 +65,16 @@
   const THROWER_SPAWN_MIN = 1.25;
   const THROWER_SPAWN_MAX = 2.10;
 
-  // Stones are jumpable (not too high)
   const STONE_SIZE  = 18;
-  const STONE_SPEED = 520;    // extra beyond scroll
-  const STONE_THROW_Y = 250;  // will be computed from thrower box; this is fallback
+  const STONE_SPEED = 520;
   const STONE_HITBOX_PAD = 3;
 
-  // ===== BEST SCORE =====
+  // Best score
   const BEST_KEY = "stephenRunnerBest";
   let best = Number(localStorage.getItem(BEST_KEY) || 0);
   if (bestEl) bestEl.textContent = String(best);
 
-  // ===== STATE =====
+  // State
   let running = false;
   let dead = false;
   let score = 0;
@@ -95,7 +97,9 @@
   let stephenImg=null, throwerImg=null, stoneImg=null;
   let haveStephen=false, haveThrower=false, haveStone=false;
 
-  if (statusEl) statusEl.textContent = "— loading assets…";
+  // Always draw something even before assets load (prevents “white screen”)
+  setStatus("— loading…");
+  draw();
 
   Promise.all([
     loadImage(ASSET.stephen),
@@ -111,16 +115,10 @@
     if (!haveThrower) miss.push("stonethrower.png");
     if (!haveStone)   miss.push("Stone.png");
 
-    if (statusEl){
-      statusEl.textContent = miss.length
-        ? `— missing: ${miss.join(", ")} (still playable)`
-        : "— press Space to begin";
-    }
-
+    setStatus(miss.length ? `— missing: ${miss.join(", ")} (still playable)` : "— press Space to begin");
     reset(true);
   });
 
-  // ===== INPUT =====
   addEventListener("keydown", (e) => {
     if (e.repeat) return;
 
@@ -142,7 +140,7 @@
   function start(){
     running = true;
     dead = false;
-    if (statusEl) statusEl.textContent = "— run";
+    setStatus("— run");
   }
 
   function jump(){
@@ -169,10 +167,9 @@
     nextThrowerIn = rand(THROWER_SPAWN_MIN, THROWER_SPAWN_MAX);
 
     if (scoreEl) scoreEl.textContent = "0";
-    if (statusEl) statusEl.textContent = first ? "— press Space to begin" : "— press Space to begin";
+    setStatus("— press Space to begin");
   }
 
-  // ===== SPAWN =====
   function spawnThrower(){
     const h = 86, w = 86;
     throwers.push({
@@ -186,9 +183,8 @@
   }
 
   function spawnStoneFromThrower(t){
-    // Put stone near thrower hand height; tuned to be jumpable
+    // jumpable height
     const stoneY = t.y + Math.floor(t.h * 0.35);
-
     stones.push({
       x: t.x + Math.floor(t.w * 0.55),
       y: stoneY,
@@ -206,10 +202,9 @@
       localStorage.setItem(BEST_KEY, String(best));
       if (bestEl) bestEl.textContent = String(best);
     }
-    if (statusEl) statusEl.textContent = "— YOU HAVE BEEN MARTYRED (R to restart)";
+    setStatus("— YOU HAVE BEEN MARTYRED (R to restart)");
   }
 
-  // ===== UPDATE =====
   function update(dt){
     if (!running || dead) return;
 
@@ -218,7 +213,6 @@
     score += Math.floor(120 * dt);
     if (scoreEl) scoreEl.textContent = String(score);
 
-    // player physics
     player.vy += GRAVITY * dt;
     if (player.vy > MAX_FALL) player.vy = MAX_FALL;
     player.y += player.vy * dt;
@@ -232,26 +226,23 @@
       player.grounded = false;
     }
 
-    // Stephen anim: use run frame when grounded, jump frame when airborne
     player.animT += dt;
     if (player.animT > 0.10){
       player.animT = 0;
-      player.animF = (player.animF + 1) % 2; // small “bounce” between idle/run feel
+      player.animF = (player.animF + 1) % 2;
     }
 
-    // spawn throwers
     nextThrowerIn -= dt;
     if (nextThrowerIn <= 0){
       spawnThrower();
       nextThrowerIn = rand(THROWER_SPAWN_MIN, THROWER_SPAWN_MAX);
     }
 
-    // throwers
     for (const t of throwers){
       t.x -= WORLD_SPEED * dt;
 
       t.animT += dt;
-      const step = 1 / 10; // 10fps
+      const step = 1 / 10;
       if (t.animT >= step){
         t.animT -= step;
         t.frame = (t.frame + 1) % THROWER_FRAMES.length;
@@ -264,7 +255,6 @@
     }
     while (throwers.length && throwers[0].x < -260) throwers.shift();
 
-    // stones
     for (const s of stones){
       s.x -= (WORLD_SPEED + STONE_SPEED) * dt;
       s.wobbleP += dt * 10;
@@ -272,7 +262,6 @@
     }
     while (stones.length && stones[0].x < -260) stones.shift();
 
-    // collision
     const px = player.x, py = player.y, pw = player.w, ph = player.h;
     for (const s of stones){
       const pad = STONE_HITBOX_PAD;
@@ -284,7 +273,6 @@
     }
   }
 
-  // ===== DRAW =====
   function draw(){
     // desert gradient
     const g = ctx.createLinearGradient(0,0,0,H);
@@ -298,14 +286,13 @@
     ctx.fillStyle = "rgba(10,10,12,0.22)";
     ctx.fillRect(0,0,W,H);
 
-    // dunes (parallax)
+    // dunes
     drawDunes();
 
     // ground
     ctx.fillStyle = "rgba(20,14,10,0.20)";
     ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
 
-    // ground line
     ctx.strokeStyle = "rgba(0,0,0,0.28)";
     ctx.lineWidth = 3;
     ctx.beginPath();
@@ -313,41 +300,34 @@
     ctx.lineTo(W, GROUND_Y);
     ctx.stroke();
 
-    // entities
     drawThrowers();
     drawStones();
     drawPlayer();
 
-    // overlays
     if (!running && !dead){
       ctx.fillStyle = "rgba(0,0,0,0.35)";
       ctx.fillRect(0,0,W,H);
       ctx.fillStyle = "rgba(255,255,255,0.92)";
-      ctx.font = "800 44px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+      ctx.font = "800 44px system-ui";
       ctx.textAlign = "center";
       ctx.fillText("Press Space to begin", W/2, H/2);
-      ctx.font = "16px system-ui, -apple-system, Segoe UI, Roboto, Arial";
-      ctx.fillStyle = "rgba(255,255,255,0.75)";
-      ctx.fillText("Endure. Jump the stones.", W/2, H/2 + 34);
     }
 
     if (dead){
       ctx.fillStyle = "rgba(0,0,0,0.46)";
       ctx.fillRect(0,0,W,H);
       ctx.fillStyle = "rgba(255,255,255,0.95)";
-      ctx.font = "900 48px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+      ctx.font = "900 48px system-ui";
       ctx.textAlign = "center";
       ctx.fillText("YOU HAVE BEEN MARTYRED", W/2, H/2);
-      ctx.font = "16px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+      ctx.font = "16px system-ui";
       ctx.fillStyle = "rgba(255,255,255,0.8)";
       ctx.fillText("Press R to restart", W/2, H/2 + 34);
     }
   }
 
   function drawDunes(){
-    const t = performance.now() / 1000;
-
-    // far dunes
+    const t = performance.now()/1000;
     ctx.fillStyle = "rgba(255,220,160,0.08)";
     const shift1 = (t * 18) % W;
     for (let i=0;i<8;i++){
@@ -357,7 +337,6 @@
       ctx.fill();
     }
 
-    // near dunes
     ctx.fillStyle = "rgba(0,0,0,0.09)";
     const shift2 = (t * 46) % W;
     for (let i=0;i<10;i++){
@@ -370,29 +349,24 @@
 
   function drawPlayer(){
     const x = player.x, y = Math.floor(player.y);
-
     if (haveStephen && stephenImg){
-      // choose frame: airborne = jump, grounded = idle/run alternating
-      let idx;
-      if (!player.grounded) idx = 2;         // jump
-      else idx = player.animF ? 1 : 0;       // run/idle bounce
-
-      const [sx, sy, sw, sh] = STEPHEN_FRAMES[idx];
-      ctx.drawImage(stephenImg, sx, sy, sw, sh, x, y - 6, player.w, player.h);
+      const idx = !player.grounded ? 2 : (player.animF ? 1 : 0);
+      const [sx,sy,sw,sh] = STEPHEN_FRAMES[idx];
+      ctx.drawImage(stephenImg, sx,sy,sw,sh, x, y-6, player.w, player.h);
     } else {
       ctx.fillStyle = "#eaeaea";
-      ctx.fillRect(x, y, player.w, player.h);
+      ctx.fillRect(x,y,player.w,player.h);
     }
   }
 
   function drawThrowers(){
     for (const t of throwers){
       if (haveThrower && throwerImg){
-        const [sx, sy, sw, sh] = THROWER_FRAMES[t.frame];
-        ctx.drawImage(throwerImg, sx, sy, sw, sh, Math.floor(t.x), Math.floor(t.y) - 4, t.w, t.h);
+        const [sx,sy,sw,sh] = THROWER_FRAMES[t.frame];
+        ctx.drawImage(throwerImg, sx,sy,sw,sh, Math.floor(t.x), Math.floor(t.y)-4, t.w, t.h);
       } else {
         ctx.fillStyle = "rgba(220,220,220,0.6)";
-        ctx.fillRect(t.x, t.y, t.w, t.h);
+        ctx.fillRect(t.x,t.y,t.w,t.h);
       }
     }
   }
@@ -400,32 +374,24 @@
   function drawStones(){
     for (const s of stones){
       const x = Math.floor(s.x), y = Math.floor(s.y), size = s.size;
-      if (haveStone && stoneImg){
-        ctx.drawImage(stoneImg, x, y, size, size);
-      } else {
-        ctx.fillStyle = "rgba(170,170,170,0.9)";
-        ctx.fillRect(x, y, size, size);
-      }
+      if (haveStone && stoneImg) ctx.drawImage(stoneImg, x, y, size, size);
+      else { ctx.fillStyle="rgba(170,170,170,0.9)"; ctx.fillRect(x,y,size,size); }
     }
   }
 
-  // ===== LOOP =====
   let last = 0;
-  function loop(t){
+  function loop(ts){
     requestAnimationFrame(loop);
-    const now = t / 1000;
+    const now = ts/1000;
     const dt = Math.min(0.033, now - last || 0);
     last = now;
-
     update(dt);
     draw();
   }
   requestAnimationFrame(loop);
 
-  // ===== HELPERS =====
-  function rand(a,b){ return a + Math.random() * (b-a); }
+  function rand(a,b){ return a + Math.random()*(b-a); }
   function rectHit(ax, ay, aw, ah, bx, by, bw, bh){
     return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
   }
 })();
-
