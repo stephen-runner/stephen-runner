@@ -96,8 +96,8 @@
   const WORLD_CAP = 980;
 
   // Background faster + ramps w/ score
-  const BG_SCROLL_BASE = 0.55;
-  const BG_SCROLL_BONUS = 0.45;
+  const BG_SCROLL_BASE = 0.35;
+  const BG_SCROLL_BONUS = 0.55;
 
   /* ================== PHYSICS ================== */
   const GRAVITY = 2600;
