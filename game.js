@@ -8,7 +8,7 @@
   const bestEl = document.getElementById("best");
   const setStatus = (t) => (statusEl.textContent = t);
 
-  // ---------------- CANVAS RESIZE (matches CSS size; prevents cut-off) ----------------
+  // ---------------- CANVAS RESIZE (match CSS size; prevents cut-off) ----------------
   let W = 1100,
     H = 520,
     GROUND_Y = 0,
@@ -60,20 +60,17 @@
     ];
   }
 
-  // Adds padding to crop rectangles so limbs/heads aren’t chopped
+  // Safe padding helper (we'll keep L/R tiny to avoid "split body")
   function padCrop(img, f, padL, padT, padR, padB) {
     let [sx, sy, sw, sh] = f;
-
     const nsx = Math.max(0, sx - padL);
     const nsy = Math.max(0, sy - padT);
-
     const nsr = Math.min(img.width, sx + sw + padR);
     const nsb = Math.min(img.height, sy + sh + padB);
-
     return [nsx, nsy, Math.max(1, nsr - nsx), Math.max(1, nsb - nsy)];
   }
 
-  // ---------------- SPRITE CROPS (your current frames) ----------------
+  // ---------------- SPRITE CROPS (your measured frames) ----------------
   const STEPHEN_FRAMES = [
     [225, 456, 225, 514], // idle
     [752, 456, 306, 489], // run
@@ -83,7 +80,7 @@
   const THROWER_FRAMES = [
     [304, 480, 198, 402],
     [711, 481, 188, 402],
-    [1234, 480, 222, 403],
+    [1234, 480, 222, 403], // release (throw here)
     [1730, 482, 216, 401],
   ];
   const THROW_ON = 2;
@@ -93,29 +90,33 @@
   const THROWER_EXPECTED_W = 2048;
   const THROWER_EXPECTED_H = 1024;
 
-  // ---------------- SIZE + ALIGN CONTROLS (ONLY TWEAK THESE) ----------------
-  const PLAYER_HEIGHT = 190; // make Stephen bigger/smaller
-  const THROWER_HEIGHT = 190; // make thrower bigger/smaller
+  // ---------------- VISUAL KNOBS (ALL "NEW CHANGES") ----------------
+  // size (not huge)
+  const PLAYER_HEIGHT = 150;
+  const THROWER_HEIGHT = 170;
 
-  // crop padding: fix “head/arms missing”
-  // If still clipped: increase TOP first.
-  const STEPHEN_PAD = { L: 6, T: 125, R: 6, B: 10 };
-  const THROWER_PAD = { L: 25, T: 35, R: 35, B: 15 };
+  // padding (top-heavy, tiny sides to avoid splitting / missing head)
+  const STEPHEN_PAD = { L: 6, T: 140, R: 6, B: 10 };
+  const THROWER_PAD = { L: 6, T: 110, R: 6, B: 10 };
 
-  // feet anchoring: small final nudge
-  const STEPHEN_FOOT_PAD = 6;
-  const THROWER_FOOT_PAD = 6;
+  // foot anchoring (fix floating)
+  const STEPHEN_FOOT_PAD = 34;
+  const THROWER_FOOT_PAD = 38;
+
+  // keep jump visible: clamp draw y + reduced jump power
+  const CLAMP_TOP = 0; // 0 = top edge
+  const CLAMP_BOTTOM_PAD = 10; // keep a tiny margin above ground
 
   // ---------------- GAME TUNING ----------------
   let WORLD_SPEED = 460;
   const WORLD_RAMP = 7;
   const WORLD_CAP = 760;
 
-  const GRAVITY = 2400;
-  const JUMP_V = 1050;
+  const GRAVITY = 2600; // slightly stronger pull-down
+  const JUMP_V = 900; // reduced so he doesn't leave screen
   const MAX_FALL = 1800;
 
-  const STONE_SIZE = 28;
+  const STONE_SIZE = 20;
   const STONE_SPEED = 520;
 
   const SPAWN_MIN = 1.15;
@@ -133,7 +134,7 @@
 
   const player = {
     x: 0,
-    yOff: 0,
+    yOff: 0, // negative = up, 0 = ground
     vy: 0,
     grounded: true,
     animT: 0,
@@ -231,11 +232,12 @@
     score += Math.floor(120 * dt);
     scoreEl.textContent = String(score);
 
-    // player physics
+    // player physics (yOff negative = up)
     player.vy += GRAVITY * dt;
     if (player.vy > MAX_FALL) player.vy = MAX_FALL;
 
     player.yOff += player.vy * dt;
+
     if (player.yOff >= 0) {
       player.yOff = 0;
       player.vy = 0;
@@ -345,24 +347,31 @@
 
     // throwers
     for (const t of throwers) {
-      if (haveThrower) {
-        const raw = THROWER_FRAMES[t.frame];
-        let f = scaledCrop(
-          throwerImg,
-          raw,
-          THROWER_EXPECTED_W,
-          THROWER_EXPECTED_H
-        );
-        f = padCrop(throwerImg, f, THROWER_PAD.L, THROWER_PAD.T, THROWER_PAD.R, THROWER_PAD.B);
+      if (!haveThrower) continue;
 
-        const scale = THROWER_HEIGHT / f[3];
-        const dw = f[2] * scale;
-        const dh = f[3] * scale;
+      const raw = THROWER_FRAMES[t.frame];
+      let f = scaledCrop(
+        throwerImg,
+        raw,
+        THROWER_EXPECTED_W,
+        THROWER_EXPECTED_H
+      );
+      f = padCrop(
+        throwerImg,
+        f,
+        THROWER_PAD.L,
+        THROWER_PAD.T,
+        THROWER_PAD.R,
+        THROWER_PAD.B
+      );
 
-        const y = (GROUND_Y - dh) + THROWER_FOOT_PAD;
+      const scale = THROWER_HEIGHT / f[3];
+      const dw = f[2] * scale;
+      const dh = f[3] * scale;
 
-        ctx.drawImage(throwerImg, f[0], f[1], f[2], f[3], t.x, y, dw, dh);
-      }
+      const y = (GROUND_Y - dh) + THROWER_FOOT_PAD;
+
+      ctx.drawImage(throwerImg, f[0], f[1], f[2], f[3], t.x, y, dw, dh);
     }
 
     // stones
@@ -386,19 +395,32 @@
         STEPHEN_EXPECTED_H
       );
 
-      // PAD THE CROP: fixes chopped head/arms
-      f = padCrop(stephenImg, f, STEPHEN_PAD.L, STEPHEN_PAD.T, STEPHEN_PAD.R, STEPHEN_PAD.B);
+      // safe padding: mostly top
+      f = padCrop(
+        stephenImg,
+        f,
+        STEPHEN_PAD.L,
+        STEPHEN_PAD.T,
+        STEPHEN_PAD.R,
+        STEPHEN_PAD.B
+      );
 
       const scale = PLAYER_HEIGHT / f[3];
       const dw = f[2] * scale;
       const dh = f[3] * scale;
 
       const px = player.x;
-      const py = (GROUND_Y - dh) + STEPHEN_FOOT_PAD + player.yOff;
+      const pyRaw = (GROUND_Y - dh) + STEPHEN_FOOT_PAD + player.yOff;
+
+      // keep Stephen visible during jump
+      const py = Math.min(
+        GROUND_Y - CLAMP_BOTTOM_PAD,
+        Math.max(CLAMP_TOP, pyRaw)
+      );
 
       ctx.drawImage(stephenImg, f[0], f[1], f[2], f[3], px, py, dw, dh);
 
-      // hitbox
+      // hitbox uses clamped py
       player.hit.x = px + dw * 0.34;
       player.hit.y = py + dh * 0.12;
       player.hit.w = dw * 0.38;
