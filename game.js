@@ -87,7 +87,7 @@
   const BG_SCROLL_BASE = 0.5;
   const BG_SCROLL_BONUS = 0.35;
 
-  const SPAWN_POOL = [0.8, 1.0, 1.4, 2.0, 2.6, 3.0];
+  const SPAWN_POOL = [0.9, 1.2, 1.4, 1.8, 2.0, 2.6, 2.7, 3.0];
   const SPAWN_JITTER = 0.25;
 
   /* ================== STATE ================== */
