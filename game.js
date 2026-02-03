@@ -8,11 +8,8 @@
   const bestEl = document.getElementById("best");
   const setStatus = (t) => (statusEl.textContent = t);
 
-  // ---------------- CANVAS RESIZE (match CSS size; prevents cut-off) ----------------
-  let W = 1100,
-    H = 520,
-    GROUND_Y = 0,
-    DPR = 1;
+  // ---------------- CANVAS RESIZE (match CSS size) ----------------
+  let W = 1100, H = 520, GROUND_Y = 0, DPR = 1;
 
   function resizeCanvas() {
     const r = canvas.getBoundingClientRect();
@@ -32,10 +29,11 @@
   }
   window.addEventListener("resize", resizeCanvas);
 
-  // ---------------- ASSETS ----------------
+  // ---------------- ASSETS (UPDATE FILENAMES IF NEEDED) ----------------
   const BASE = new URL("./", location.href);
   const ASSET = {
-    stephen: new URL("Assets/StephenPixel.png", BASE).href,
+    // make sure this points to your NEW runner sheet file name
+    runner: new URL("Assets/Runner.png", BASE).href,
     thrower: new URL("Assets/stonethrower.png", BASE).href,
     stone: new URL("Assets/Stone.png", BASE).href,
   };
@@ -49,76 +47,40 @@
     });
   }
 
-  function scaledCrop(img, frame, expectedW, expectedH) {
-    const sx = img.width / expectedW;
-    const sy = img.height / expectedH;
-    return [
-      Math.round(frame[0] * sx),
-      Math.round(frame[1] * sy),
-      Math.round(frame[2] * sx),
-      Math.round(frame[3] * sy),
-    ];
-  }
-
-  // Safe padding helper (we'll keep L/R tiny to avoid "split body")
-  function padCrop(img, f, padL, padT, padR, padB) {
-    let [sx, sy, sw, sh] = f;
-    const nsx = Math.max(0, sx - padL);
-    const nsy = Math.max(0, sy - padT);
-    const nsr = Math.min(img.width, sx + sw + padR);
-    const nsb = Math.min(img.height, sy + sh + padB);
-    return [nsx, nsy, Math.max(1, nsr - nsx), Math.max(1, nsb - nsy)];
-  }
-
-  // ---------------- SPRITE CROPS (your measured frames) ----------------
+  // ---------------- SPRITE FRAMES (FROM YOUR MEASUREMENTS) ----------------
+  // Runner.png: 846 x 414
   const STEPHEN_FRAMES = [
-    [225, 456, 225, 514], // idle
-    [752, 456, 306, 489], // run
-    [1392, 374, 279, 503], // jump
+    [0,   0, 250, 414],  // idle
+    [250, 0, 315, 414],  // run
+    [565, 0, 281, 414],  // jump
   ];
 
+  // stonethrower.png: 1400 x 303, each frame 318 x 303 (4 frames)
+  // If your sheet has gaps, you’ll adjust these x values slightly.
   const THROWER_FRAMES = [
-    [304, 480, 198, 402],
-    [711, 481, 188, 402],
-    [1234, 480, 222, 403], // release (throw here)
-    [1730, 482, 216, 401],
+    [0,   0, 318, 303],
+    [318, 0, 318, 303],
+    [636, 0, 318, 303],  // release
+    [954, 0, 318, 303],
   ];
   const THROW_ON = 2;
 
-  const STEPHEN_EXPECTED_W = 1536;
-  const STEPHEN_EXPECTED_H = 1024;
-  const THROWER_EXPECTED_W = 2048;
-  const THROWER_EXPECTED_H = 1024;
-
-  // ---------------- VISUAL KNOBS (ALL "NEW CHANGES") ----------------
-  // size (not huge)
-  const PLAYER_HEIGHT = 150;
-  const THROWER_HEIGHT = 170;
-
-  // padding (top-heavy, tiny sides to avoid splitting / missing head)
-  const STEPHEN_PAD = { L: 6, T: 140, R: 6, B: 10 };
-  const THROWER_PAD = { L: 6, T: 110, R: 6, B: 10 };
-
-  // foot anchoring (fix floating)
-  const STEPHEN_FOOT_PAD = 34;
-  const THROWER_FOOT_PAD = 38;
-
-  // keep jump visible: clamp draw y + reduced jump power
-  const CLAMP_TOP = 0; // 0 = top edge
-  const CLAMP_BOTTOM_PAD = 10; // keep a tiny margin above ground
+  // ---------------- VISUAL SIZE (NOT HUGE) ----------------
+  // These are the ONLY size knobs.
+  const PLAYER_HEIGHT = 140;   // runner on-screen height
+  const THROWER_HEIGHT = 150;  // thrower on-screen height
+  const STONE_SIZE = 18;
 
   // ---------------- GAME TUNING ----------------
   let WORLD_SPEED = 460;
   const WORLD_RAMP = 7;
   const WORLD_CAP = 760;
 
-  const GRAVITY = 2600; // slightly stronger pull-down
-  const JUMP_V = 900; // reduced so he doesn't leave screen
+  const GRAVITY = 2600;
+  const JUMP_V = 900;
   const MAX_FALL = 1800;
 
-  const STONE_SIZE = 20;
   const STONE_SPEED = 520;
-
   const SPAWN_MIN = 1.15;
   const SPAWN_MAX = 2.0;
 
@@ -128,13 +90,11 @@
   bestEl.textContent = best;
 
   // ---------------- STATE ----------------
-  let running = false,
-    dead = false,
-    score = 0;
+  let running = false, dead = false, score = 0;
 
   const player = {
     x: 0,
-    yOff: 0, // negative = up, 0 = ground
+    yOff: 0,     // 0 = on ground, negative = up
     vy: 0,
     grounded: true,
     animT: 0,
@@ -146,12 +106,8 @@
   const stones = [];
   let nextSpawn = 1.5;
 
-  let stephenImg,
-    throwerImg,
-    stoneImg,
-    haveStephen = false,
-    haveThrower = false,
-    haveStone = false;
+  let runnerImg, throwerImg, stoneImg;
+  let haveRunner = false, haveThrower = false, haveStone = false;
 
   // ---------------- INPUT ----------------
   addEventListener("keydown", (e) => {
@@ -219,7 +175,7 @@
     stones.push({
       x: t.x + 60,
       y: GROUND_Y - STONE_SIZE,
-      wob: Math.random() * Math.PI * 2,
+      p: Math.random() * Math.PI * 2,
     });
   }
 
@@ -232,12 +188,11 @@
     score += Math.floor(120 * dt);
     scoreEl.textContent = String(score);
 
-    // player physics (yOff negative = up)
+    // player physics
     player.vy += GRAVITY * dt;
     if (player.vy > MAX_FALL) player.vy = MAX_FALL;
 
     player.yOff += player.vy * dt;
-
     if (player.yOff >= 0) {
       player.yOff = 0;
       player.vy = 0;
@@ -246,24 +201,24 @@
 
     // animation
     player.animT += dt;
-    if (player.animT > 0.1) {
+    if (player.animT > 0.12) { // slightly slower
       player.animT = 0;
       player.animF ^= 1;
     }
 
-    // spawns
+    // spawn timer
     nextSpawn -= dt;
     if (nextSpawn <= 0) {
       spawnThrower();
       nextSpawn = rand(SPAWN_MIN, SPAWN_MAX);
     }
 
-    // throwers
+    // throwers animate + move
     for (const t of throwers) {
       t.x -= WORLD_SPEED * dt;
 
       t.anim += dt;
-      if (t.anim > 0.1) {
+      if (t.anim > 0.12) {
         t.anim = 0;
         t.frame = (t.frame + 1) % 4;
 
@@ -274,22 +229,16 @@
       }
     }
 
-    // stones
+    // stones move + bob
     for (const s of stones) {
       s.x -= (WORLD_SPEED + STONE_SPEED) * dt;
-      s.wob += dt * 10;
-      s.y = (GROUND_Y - STONE_SIZE) + Math.sin(s.wob) * 2;
+      s.p += dt * 10;
+      s.y = (GROUND_Y - STONE_SIZE) + Math.sin(s.p) * 2;
 
       if (
         rect(
-          player.hit.x,
-          player.hit.y,
-          player.hit.w,
-          player.hit.h,
-          s.x,
-          s.y,
-          STONE_SIZE,
-          STONE_SIZE
+          player.hit.x, player.hit.y, player.hit.w, player.hit.h,
+          s.x, s.y, STONE_SIZE, STONE_SIZE
         )
       ) {
         die();
@@ -298,7 +247,7 @@
 
     // cleanup
     for (let i = throwers.length - 1; i >= 0; i--) {
-      if (throwers[i].x < -300) throwers.splice(i, 1);
+      if (throwers[i].x < -400) throwers.splice(i, 1);
     }
     for (let i = stones.length - 1; i >= 0; i--) {
       if (stones[i].x < -200) stones.splice(i, 1);
@@ -322,7 +271,6 @@
   }
 
   function draw() {
-    // bg gradient
     const g = ctx.createLinearGradient(0, 0, 0, H);
     g.addColorStop(0, "#2b2431");
     g.addColorStop(0.6, "#6e4b3f");
@@ -349,29 +297,15 @@
     for (const t of throwers) {
       if (!haveThrower) continue;
 
-      const raw = THROWER_FRAMES[t.frame];
-      let f = scaledCrop(
-        throwerImg,
-        raw,
-        THROWER_EXPECTED_W,
-        THROWER_EXPECTED_H
-      );
-      f = padCrop(
-        throwerImg,
-        f,
-        THROWER_PAD.L,
-        THROWER_PAD.T,
-        THROWER_PAD.R,
-        THROWER_PAD.B
-      );
-
+      const f = THROWER_FRAMES[t.frame];
       const scale = THROWER_HEIGHT / f[3];
       const dw = f[2] * scale;
       const dh = f[3] * scale;
 
-      const y = (GROUND_Y - dh) + THROWER_FOOT_PAD;
+      const x = t.x;
+      const y = GROUND_Y - dh;
 
-      ctx.drawImage(throwerImg, f[0], f[1], f[2], f[3], t.x, y, dw, dh);
+      ctx.drawImage(throwerImg, f[0], f[1], f[2], f[3], x, y, dw, dh);
     }
 
     // stones
@@ -384,47 +318,24 @@
     }
 
     // player
-    const idx = !player.grounded ? 2 : player.animF ? 1 : 0;
-
-    if (haveStephen) {
-      const raw = STEPHEN_FRAMES[idx];
-      let f = scaledCrop(
-        stephenImg,
-        raw,
-        STEPHEN_EXPECTED_W,
-        STEPHEN_EXPECTED_H
-      );
-
-      // safe padding: mostly top
-      f = padCrop(
-        stephenImg,
-        f,
-        STEPHEN_PAD.L,
-        STEPHEN_PAD.T,
-        STEPHEN_PAD.R,
-        STEPHEN_PAD.B
-      );
+    if (haveRunner) {
+      const idx = !player.grounded ? 2 : (player.animF ? 1 : 0);
+      const f = STEPHEN_FRAMES[idx];
 
       const scale = PLAYER_HEIGHT / f[3];
       const dw = f[2] * scale;
       const dh = f[3] * scale;
 
       const px = player.x;
-      const pyRaw = (GROUND_Y - dh) + STEPHEN_FOOT_PAD + player.yOff;
+      const py = (GROUND_Y - dh) + player.yOff;
 
-      // keep Stephen visible during jump
-      const py = Math.min(
-        GROUND_Y - CLAMP_BOTTOM_PAD,
-        Math.max(CLAMP_TOP, pyRaw)
-      );
+      ctx.drawImage(runnerImg, f[0], f[1], f[2], f[3], px, py, dw, dh);
 
-      ctx.drawImage(stephenImg, f[0], f[1], f[2], f[3], px, py, dw, dh);
-
-      // hitbox uses clamped py
-      player.hit.x = px + dw * 0.34;
-      player.hit.y = py + dh * 0.12;
-      player.hit.w = dw * 0.38;
-      player.hit.h = dh * 0.78;
+      // hitbox
+      player.hit.x = px + dw * 0.30;
+      player.hit.y = py + dh * 0.18;
+      player.hit.w = dw * 0.40;
+      player.hit.h = dh * 0.70;
     }
 
     if (!running && !dead) {
@@ -472,18 +383,13 @@
   resizeCanvas();
 
   Promise.all([
-    loadImage(ASSET.stephen),
+    loadImage(ASSET.runner),
     loadImage(ASSET.thrower),
     loadImage(ASSET.stone),
   ]).then(([a, b, c]) => {
-    stephenImg = a.img;
-    haveStephen = a.ok;
-
-    throwerImg = b.img;
-    haveThrower = b.ok;
-
-    stoneImg = c.img;
-    haveStone = c.ok;
+    runnerImg = a.img; haveRunner = a.ok;
+    throwerImg = b.img; haveThrower = b.ok;
+    stoneImg = c.img; haveStone = c.ok;
 
     reset();
     requestAnimationFrame(loop);
