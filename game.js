@@ -21,8 +21,6 @@
 
     W = r.width;
     H = r.height;
-
-    // keep ground consistent with your current feel
     GROUND_Y = Math.floor(H * 0.82);
 
     player.x = Math.floor(W * 0.18);
@@ -35,7 +33,7 @@
     runner: new URL("Assets/StephenPixel.png", BASE).href,
     thrower: new URL("Assets/stonethrower.png", BASE).href,
     stone: new URL("Assets/Stone.png", BASE).href,
-    bg: new URL("Assets/BackgroundGame.png", BASE).href, // <-- new
+    bg: new URL("Assets/BackgroundGame.png", BASE).href,
   };
 
   function loadImage(src) {
@@ -50,9 +48,9 @@
   // ---------------- RUNNER FRAMES ----------------
   const RUNNER_H = 414;
   const RUNNER_FRAMES = [
-    [0, 0, 250, RUNNER_H],   // idle
-    [250, 0, 315, RUNNER_H], // run
-    [565, 0, 281, RUNNER_H], // jump
+    [0, 0, 250, RUNNER_H],    // idle
+    [250, 0, 315, RUNNER_H],  // run
+    [565, 0, 281, RUNNER_H],  // jump
   ];
 
   // ---------------- THROWER FRAMES ----------------
@@ -66,17 +64,21 @@
 
   function computeThrowerFrames(img) {
     const totalFramesW = THROWER_FRAME_W * THROWER_COUNT; // 1272
-    const extra = img.width - totalFramesW;
-    THROWER_LEFTPAD = Math.max(0, Math.floor(extra / 2));
+    const extra = img.width - totalFramesW;              // e.g. 128
+    THROWER_LEFTPAD = Math.max(0, Math.floor(extra / 2)); // e.g. 64
+
+    // Small "inset" crop to avoid edge bleed from neighboring frames
+    // (prevents slight previous-frame clipping)
+    const INSET = 2;
+
     return [
-      [THROWER_LEFTPAD + 0 * THROWER_FRAME_W, 0, THROWER_FRAME_W, THROWER_FRAME_H],
-      [THROWER_LEFTPAD + 1 * THROWER_FRAME_W, 0, THROWER_FRAME_W, THROWER_FRAME_H],
-      [THROWER_LEFTPAD + 2 * THROWER_FRAME_W, 0, THROWER_FRAME_W, THROWER_FRAME_H],
-      [THROWER_LEFTPAD + 3 * THROWER_FRAME_W, 0, THROWER_FRAME_W, THROWER_FRAME_H],
+      [THROWER_LEFTPAD + 0 * THROWER_FRAME_W + INSET, 0, THROWER_FRAME_W - INSET * 2, THROWER_FRAME_H],
+      [THROWER_LEFTPAD + 1 * THROWER_FRAME_W + INSET, 0, THROWER_FRAME_W - INSET * 2, THROWER_FRAME_H],
+      [THROWER_LEFTPAD + 2 * THROWER_FRAME_W + INSET, 0, THROWER_FRAME_W - INSET * 2, THROWER_FRAME_H],
+      [THROWER_LEFTPAD + 3 * THROWER_FRAME_W + INSET, 0, THROWER_FRAME_W - INSET * 2, THROWER_FRAME_H],
     ];
   }
 
-  // IMPORTANT: no overscan sampling (prevents neighbor-frame bleed)
   function drawThrowerFrame(img, frame, dx, dy, dw, dh) {
     const [sx, sy, sw, sh] = frame;
     ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
@@ -85,7 +87,6 @@
   // ---------------- VISUAL SIZE ----------------
   const PLAYER_HEIGHT = 140;
   const THROWER_HEIGHT = 150;
-
   const STONE_SIZE = 28;
 
   // ---------------- WORLD / SPEED ----------------
@@ -93,26 +94,32 @@
   const WORLD_RAMP = 18;
   const WORLD_CAP = 980;
 
-  // Background scroll multiplier (smaller = slower parallax)
-  const BG_SCROLL_MULT = 0.35;
+  // Background faster + speeds up with score
+  const BG_SCROLL_BASE = 0.50;     // was ~0.35
+  const BG_SCROLL_BONUS = 0.35;    // extra multiplier added as score grows
 
   // ---------------- PHYSICS ----------------
   const GRAVITY = 2600;
   const JUMP_V = 900;
   const MAX_FALL = 1800;
 
-  // Stone flight: straight throw with slow gradual fall
+  // Stones
   const STONE_SPEED = 820;
   const STONE_DROP_RATE = 65;
 
-  // Rare toss (1/10)
+  // Rare toss 1/10
   const STONE_TOSS_CHANCE = 0.10;
   const STONE_TOSS_GRAV = 1600;
   const STONE_TOSS_UP = 520;
 
   // ---------------- SPAWNS (VARIED) ----------------
-  const SPAWN_POOL = [0.5, 0.8, 1.0, 1.4, 2.0, 2.6, 3.0]; // includes 2s
+  // Removed 0.5
+  const SPAWN_POOL = [0.8, 1.0, 1.4, 2.0, 2.6, 3.0];
   const SPAWN_JITTER = 0.25;
+
+  // ---------------- THROWER BEHAVIOR ----------------
+  // They will "idle" offscreen until they throw, then slide left and fade out.
+  const THROWER_SLIDE_SPEED = 1.25; // multiplier on WORLD_SPEED after thrown
 
   // ---------------- BEST SCORE ----------------
   const BEST_KEY = "stephenRunnerBest";
@@ -136,7 +143,7 @@
   const stones = [];
   let nextSpawn = 1.0;
 
-  // background scroll position (in screen pixels)
+  // background scroll
   let bgScrollPx = 0;
 
   let runnerImg, throwerImg, stoneImg, bgImg;
@@ -164,7 +171,6 @@
 
   function reset() {
     running = false; dead = false; score = 0;
-
     WORLD_SPEED = 620;
 
     player.vy = 0;
@@ -194,17 +200,19 @@
   function pickSpawnDelay() {
     const base = SPAWN_POOL[(Math.random() * SPAWN_POOL.length) | 0];
     const jitter = (Math.random() * 2 - 1) * SPAWN_JITTER;
-    return Math.max(0.35, base + jitter);
+    return Math.max(0.55, base + jitter);
   }
 
   // ---------------- SPAWNS ----------------
   function spawnThrower() {
     throwers.push({
-      x: W + 180,
+      x: W + 220,     // parked just off-screen
       frame: 0,
       anim: 0,
       thrown: false,
       alpha: 1,
+      // after thrown, it starts moving left
+      sliding: false,
     });
   }
 
@@ -224,13 +232,18 @@
   function update(dt) {
     if (!running || dead) return;
 
+    // speed ramps
     WORLD_SPEED = Math.min(WORLD_CAP, WORLD_SPEED + WORLD_RAMP * dt);
 
-    // background scroll
-    bgScrollPx += WORLD_SPEED * BG_SCROLL_MULT * dt;
-
+    // score
     score += Math.floor(140 * dt);
     scoreEl.textContent = String(score);
+
+    // background: faster + increases with score
+    // scoreFactor goes 0..1 over ~0..3000 score (tweak if you want)
+    const scoreFactor = clamp01(score / 3000);
+    const bgMult = BG_SCROLL_BASE + BG_SCROLL_BONUS * scoreFactor;
+    bgScrollPx += WORLD_SPEED * bgMult * dt;
 
     // player physics
     player.vy += GRAVITY * dt;
@@ -257,21 +270,27 @@
       nextSpawn = pickSpawnDelay();
     }
 
-    // throwers move/animate
+    // throwers animate, but DO NOT move left until after throw
     for (const t of throwers) {
-      t.x -= WORLD_SPEED * dt;
-
       t.anim += dt;
+
+      // animate frames while parked
       if (t.anim > 0.12) {
         t.anim = 0;
         t.frame = (t.frame + 1) % 4;
+
         if (t.frame === THROW_ON && !t.thrown) {
           spawnStone(t);
           t.thrown = true;
+          t.sliding = true; // start sliding away after throw
         }
       }
 
-      // fade out near the left edge
+      if (t.sliding) {
+        t.x -= WORLD_SPEED * THROWER_SLIDE_SPEED * dt;
+      }
+
+      // fade out near the left edge (only relevant once sliding)
       const fadeStart = -60;
       const fadeEnd = -200;
       if (t.x < fadeStart) {
@@ -308,37 +327,37 @@
 
   // ---------------- DRAW ----------------
   function drawScrollingBackground() {
-    if (!haveBg) return;
+    if (!haveBg) {
+      ctx.fillStyle = "#111";
+      ctx.fillRect(0, 0, W, H);
+      return;
+    }
 
-    // scale bg to fill canvas height
     const scale = H / bgImg.height;
     const dw = bgImg.width * scale;
     const dh = H;
 
-    // wrap offset in screen pixels
     const off = ((bgScrollPx % dw) + dw) % dw;
-
-    // draw twice to cover full screen
     const x1 = -off;
+
     ctx.drawImage(bgImg, 0, 0, bgImg.width, bgImg.height, x1, 0, dw, dh);
     ctx.drawImage(bgImg, 0, 0, bgImg.width, bgImg.height, x1 + dw, 0, dw, dh);
   }
 
   function draw() {
-    // Background strip (your 5-scene image)
     drawScrollingBackground();
 
-    // ground line overlay (keeps current feel)
-    ctx.fillStyle = "rgba(20,14,10,.18)";
+    // subtle ground overlay
+    ctx.fillStyle = "rgba(20,14,10,.14)";
     ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
-    ctx.strokeStyle = "rgba(0,0,0,.25)";
+    ctx.strokeStyle = "rgba(0,0,0,.22)";
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.moveTo(0, GROUND_Y);
     ctx.lineTo(W, GROUND_Y);
     ctx.stroke();
 
-    // throwers (with fade-out)
+    // throwers
     if (haveThrower && THROWER_FRAMES) {
       for (const t of throwers) {
         const f = THROWER_FRAMES[t.frame];
@@ -386,7 +405,7 @@
       player.hit.h = dh * 0.70;
     }
 
-    // HUD inside the scene (top-right)
+    // HUD inside scene
     ctx.save();
     ctx.fillStyle = "#fff";
     ctx.globalAlpha = 0.95;
