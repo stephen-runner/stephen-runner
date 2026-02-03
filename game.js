@@ -8,26 +8,21 @@
   const bestEl = document.getElementById("best");
   const setStatus = (t) => (statusEl.textContent = t);
 
-  // ---------------- CANVAS RESIZE ----------------
-  let W = 1100, H = 520, GROUND_Y = 0, DPR = 1;
+  /* ================== CANVAS ================== */
+  let W = 1100, H = 520, GROUND_Y = 0;
 
   function resizeCanvas() {
     const r = canvas.getBoundingClientRect();
-    DPR = window.devicePixelRatio || 1;
-
-    canvas.width = Math.max(1, Math.round(r.width * DPR));
-    canvas.height = Math.max(1, Math.round(r.height * DPR));
-    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-
+    canvas.width = r.width;
+    canvas.height = r.height;
     W = r.width;
     H = r.height;
     GROUND_Y = Math.floor(H * 0.82);
-
     player.x = Math.floor(W * 0.18);
   }
   window.addEventListener("resize", resizeCanvas);
 
-  // ---------------- ASSETS ----------------
+  /* ================== ASSETS ================== */
   const BASE = new URL("./", location.href);
   const ASSET = {
     runner: new URL("Assets/StephenPixel.png", BASE).href,
@@ -36,125 +31,86 @@
     bg: new URL("Assets/BackgroundGame.png", BASE).href,
   };
 
-  function loadImage(src) {
-    return new Promise((res) => {
+  const loadImage = (src) =>
+    new Promise((res) => {
       const img = new Image();
-      img.onload = () => res({ img, ok: true, src });
-      img.onerror = () => res({ img: null, ok: false, src });
+      img.onload = () => res({ img, ok: true });
+      img.onerror = () => res({ img: null, ok: false });
       img.src = src;
     });
-  }
 
-  // ---------------- RUNNER FRAMES ----------------
-  const RUNNER_H = 414;
+  /* ================== FRAMES ================== */
   const RUNNER_FRAMES = [
-    [0, 0, 250, RUNNER_H],    // idle
-    [250, 0, 315, RUNNER_H],  // run
-    [565, 0, 281, RUNNER_H],  // jump
+    [0, 0, 250, 414],
+    [250, 0, 315, 414],
+    [565, 0, 281, 414],
   ];
 
-  // ---------------- THROWER FRAMES ----------------
-  const THROWER_FRAME_W = 318;
-  const THROWER_FRAME_H = 303;
-  const THROWER_COUNT = 4;
+  const THROW_W = 318, THROW_H = 303;
   const THROW_ON = 2;
-
   let THROWER_FRAMES = null;
-  let THROWER_LEFTPAD = 0;
 
   function computeThrowerFrames(img) {
-    const totalFramesW = THROWER_FRAME_W * THROWER_COUNT; // 1272
-    const extra = img.width - totalFramesW;              // e.g. 128
-    THROWER_LEFTPAD = Math.max(0, Math.floor(extra / 2)); // e.g. 64
-
-    // Small "inset" crop to avoid edge bleed from neighboring frames
-    // (prevents slight previous-frame clipping)
-    const INSET = 2;
-
-    return [
-      [THROWER_LEFTPAD + 0 * THROWER_FRAME_W + INSET, 0, THROWER_FRAME_W - INSET * 2, THROWER_FRAME_H],
-      [THROWER_LEFTPAD + 1 * THROWER_FRAME_W + INSET, 0, THROWER_FRAME_W - INSET * 2, THROWER_FRAME_H],
-      [THROWER_LEFTPAD + 2 * THROWER_FRAME_W + INSET, 0, THROWER_FRAME_W - INSET * 2, THROWER_FRAME_H],
-      [THROWER_LEFTPAD + 3 * THROWER_FRAME_W + INSET, 0, THROWER_FRAME_W - INSET * 2, THROWER_FRAME_H],
-    ];
+    const inset = 2;
+    const pad = Math.floor((img.width - THROW_W * 4) / 2);
+    return Array.from({ length: 4 }, (_, i) => [
+      pad + i * THROW_W + inset,
+      0,
+      THROW_W - inset * 2,
+      THROW_H,
+    ]);
   }
 
-  function drawThrowerFrame(img, frame, dx, dy, dw, dh) {
-    const [sx, sy, sw, sh] = frame;
-    ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
-  }
-
-  // ---------------- VISUAL SIZE ----------------
+  /* ================== TUNING ================== */
   const PLAYER_HEIGHT = 140;
   const THROWER_HEIGHT = 150;
-  const STONE_SIZE = 28;
 
-  // ---------------- WORLD / SPEED ----------------
+  const STONE_BASE_SIZE = 28;
+  const STONE_GROW_START = 3000;
+  const STONE_GROW_SPAN = 8000;
+  const STONE_MAX_MULT = 7;
+
+  const STONE_SPEED_BASE = 820;
+  const STONE_SPEED_BOOST = 520;
+  const STONE_SPEED_START = 7000;
+  const STONE_SPEED_SPAN = 8000;
+
+  const STONE_DROP = 65;
+  const STONE_TOSS_CHANCE = 0.1;
+  const STONE_TOSS_UP = 520;
+  const STONE_TOSS_GRAV = 1600;
+
   let WORLD_SPEED = 620;
   const WORLD_RAMP = 18;
   const WORLD_CAP = 980;
 
-  // Background faster + speeds up with score
-  const BG_SCROLL_BASE = 0.50;     // was ~0.35
-  const BG_SCROLL_BONUS = 0.35;    // extra multiplier added as score grows
+  const BG_SCROLL_BASE = 0.5;
+  const BG_SCROLL_BONUS = 0.35;
 
-  // ---------------- PHYSICS ----------------
-  const GRAVITY = 2600;
-  const JUMP_V = 900;
-  const MAX_FALL = 1800;
-
-  // Stones
-  const STONE_SPEED = 820;
-  const STONE_DROP_RATE = 65;
-
-  // Rare toss 1/10
-  const STONE_TOSS_CHANCE = 0.10;
-  const STONE_TOSS_GRAV = 1600;
-  const STONE_TOSS_UP = 520;
-
-  // ---------------- SPAWNS (VARIED) ----------------
-  // Removed 0.5
   const SPAWN_POOL = [0.8, 1.0, 1.4, 2.0, 2.6, 3.0];
   const SPAWN_JITTER = 0.25;
 
-  // ---------------- THROWER BEHAVIOR ----------------
-  // They will "idle" offscreen until they throw, then slide left and fade out.
-  const THROWER_SLIDE_SPEED = 1.25; // multiplier on WORLD_SPEED after thrown
-
-  // ---------------- BEST SCORE ----------------
-  const BEST_KEY = "stephenRunnerBest";
-  let best = +localStorage.getItem(BEST_KEY) || 0;
-  bestEl.textContent = best;
-
-  // ---------------- STATE ----------------
+  /* ================== STATE ================== */
   let running = false, dead = false, score = 0;
+  let nextSpawn = 1;
+  let bgScroll = 0;
 
   const player = {
-    x: 0,
-    yOff: 0,
-    vy: 0,
-    grounded: true,
-    animT: 0,
-    animF: 0,
+    x: 0, yOff: 0, vy: 0,
+    grounded: true, animT: 0, animF: 0,
     hit: { x: 0, y: 0, w: 40, h: 62 },
   };
 
   const throwers = [];
   const stones = [];
-  let nextSpawn = 1.0;
-
-  // background scroll
-  let bgScrollPx = 0;
 
   let runnerImg, throwerImg, stoneImg, bgImg;
-  let haveRunner = false, haveThrower = false, haveStone = false, haveBg = false;
+  let haveRunner, haveThrower, haveStone, haveBg;
 
-  // ---------------- INPUT ----------------
+  /* ================== INPUT ================== */
   addEventListener("keydown", (e) => {
     if (e.repeat) return;
-
     if (e.code === "Space" || e.code === "ArrowUp") {
-      e.preventDefault();
       if (!running && !dead) start();
       else if (dead) reset();
       else jump();
@@ -165,90 +121,68 @@
   function start() { running = true; dead = false; setStatus("— run"); }
   function jump() {
     if (!player.grounded) return;
-    player.vy = -JUMP_V;
+    player.vy = -900;
     player.grounded = false;
   }
 
   function reset() {
     running = false; dead = false; score = 0;
     WORLD_SPEED = 620;
-
-    player.vy = 0;
-    player.yOff = 0;
+    player.vy = player.yOff = 0;
     player.grounded = true;
-    player.animT = 0;
-    player.animF = 0;
-
-    throwers.length = 0;
-    stones.length = 0;
-
-    nextSpawn = pickSpawnDelay();
-    scoreEl.textContent = "0";
+    throwers.length = stones.length = 0;
+    nextSpawn = pickSpawn();
     setStatus("— press Space to begin");
   }
 
   function die() {
     dead = true; running = false;
-    if (score > best) {
-      best = score;
-      localStorage.setItem(BEST_KEY, best);
-      bestEl.textContent = best;
-    }
-    setStatus("— YOU HAVE BEEN MARTYRED (R to restart)");
+    const best = Math.max(+localStorage.best || 0, score);
+    localStorage.best = best;
+    bestEl.textContent = best;
+    setStatus("— YOU HAVE BEEN MARTYRED");
   }
 
-  function pickSpawnDelay() {
-    const base = SPAWN_POOL[(Math.random() * SPAWN_POOL.length) | 0];
-    const jitter = (Math.random() * 2 - 1) * SPAWN_JITTER;
-    return Math.max(0.55, base + jitter);
+  function pickSpawn() {
+    const b = SPAWN_POOL[Math.random() * SPAWN_POOL.length | 0];
+    return Math.max(0.6, b + (Math.random() * 2 - 1) * SPAWN_JITTER);
   }
 
-  // ---------------- SPAWNS ----------------
+  /* ================== SPAWN ================== */
   function spawnThrower() {
     throwers.push({
-      x: W + 220,     // parked just off-screen
+      x: W + 220,
       frame: 0,
       anim: 0,
       thrown: false,
-      alpha: 1,
-      // after thrown, it starts moving left
       sliding: false,
+      alpha: 1,
     });
   }
 
   function spawnStone(t) {
-    const handY = GROUND_Y - THROWER_HEIGHT * 0.60;
     const toss = Math.random() < STONE_TOSS_CHANCE;
-
     stones.push({
       x: t.x + 110,
-      y: handY,
+      y: GROUND_Y - THROWER_HEIGHT * 0.6,
       toss,
-      vy: toss ? -STONE_TOSS_UP : 0
+      vy: toss ? -STONE_TOSS_UP : 0,
     });
   }
 
-  // ---------------- UPDATE ----------------
+  /* ================== UPDATE ================== */
   function update(dt) {
     if (!running || dead) return;
 
-    // speed ramps
+    score += Math.floor(140 * dt);
+    scoreEl.textContent = score;
+
     WORLD_SPEED = Math.min(WORLD_CAP, WORLD_SPEED + WORLD_RAMP * dt);
 
-    // score
-    score += Math.floor(140 * dt);
-    scoreEl.textContent = String(score);
+    const score01 = clamp01(score / 3000);
+    bgScroll += WORLD_SPEED * (BG_SCROLL_BASE + BG_SCROLL_BONUS * score01) * dt;
 
-    // background: faster + increases with score
-    // scoreFactor goes 0..1 over ~0..3000 score (tweak if you want)
-    const scoreFactor = clamp01(score / 3000);
-    const bgMult = BG_SCROLL_BASE + BG_SCROLL_BONUS * scoreFactor;
-    bgScrollPx += WORLD_SPEED * bgMult * dt;
-
-    // player physics
-    player.vy += GRAVITY * dt;
-    if (player.vy > MAX_FALL) player.vy = MAX_FALL;
-
+    player.vy += 2600 * dt;
     player.yOff += player.vy * dt;
     if (player.yOff >= 0) {
       player.yOff = 0;
@@ -256,208 +190,112 @@
       player.grounded = true;
     }
 
-    // runner animation
     player.animT += dt;
-    if (player.animT > 0.12) {
-      player.animT = 0;
-      player.animF ^= 1;
-    }
+    if (player.animT > 0.12) { player.animT = 0; player.animF ^= 1; }
 
-    // spawn timer
     nextSpawn -= dt;
     if (nextSpawn <= 0) {
       spawnThrower();
-      nextSpawn = pickSpawnDelay();
+      nextSpawn = pickSpawn();
     }
 
-    // throwers animate, but DO NOT move left until after throw
     for (const t of throwers) {
       t.anim += dt;
-
-      // animate frames while parked
       if (t.anim > 0.12) {
         t.anim = 0;
         t.frame = (t.frame + 1) % 4;
-
         if (t.frame === THROW_ON && !t.thrown) {
           spawnStone(t);
           t.thrown = true;
-          t.sliding = true; // start sliding away after throw
+          t.sliding = true;
         }
       }
-
-      if (t.sliding) {
-        t.x -= WORLD_SPEED * THROWER_SLIDE_SPEED * dt;
-      }
-
-      // fade out near the left edge (only relevant once sliding)
-      const fadeStart = -60;
-      const fadeEnd = -200;
-      if (t.x < fadeStart) {
-        t.alpha = clamp01((t.x - fadeEnd) / (fadeStart - fadeEnd));
-      } else {
-        t.alpha = 1;
-      }
+      if (t.sliding) t.x -= WORLD_SPEED * 1.25 * dt;
+      if (t.x < -200) t.alpha = clamp01((t.x + 260) / 60);
     }
 
-    // stones
-    for (const s of stones) {
-      s.x -= (WORLD_SPEED + STONE_SPEED) * dt;
+    const growT = invLerp(STONE_GROW_START, STONE_GROW_START + STONE_GROW_SPAN, score);
+    const stoneSize = STONE_BASE_SIZE * (1 + (STONE_MAX_MULT - 1) * growT);
 
+    const speedT = invLerp(STONE_SPEED_START, STONE_SPEED_START + STONE_SPEED_SPAN, score);
+    const stoneSpeed = STONE_SPEED_BASE + STONE_SPEED_BOOST * speedT;
+
+    for (const s of stones) {
+      s.x -= (WORLD_SPEED + stoneSpeed) * dt;
       if (s.toss) {
         s.vy += STONE_TOSS_GRAV * dt;
         s.y += s.vy * dt;
       } else {
-        s.y += STONE_DROP_RATE * dt;
+        s.y += STONE_DROP * dt;
       }
-
-      if (rect(player.hit.x, player.hit.y, player.hit.w, player.hit.h, s.x, s.y, STONE_SIZE, STONE_SIZE)) {
-        die();
-      }
+      if (rect(player.hit, s.x, s.y, stoneSize, stoneSize)) die();
     }
 
-    // cleanup
-    for (let i = throwers.length - 1; i >= 0; i--) {
-      if (throwers[i].x < -260) throwers.splice(i, 1);
-    }
-    for (let i = stones.length - 1; i >= 0; i--) {
-      if (stones[i].x < -220 || stones[i].y > H + 200) stones.splice(i, 1);
-    }
+    throwers.filter(t => t.x > -300);
+    stones.filter(s => s.x > -300);
   }
 
-  // ---------------- DRAW ----------------
-  function drawScrollingBackground() {
-    if (!haveBg) {
-      ctx.fillStyle = "#111";
-      ctx.fillRect(0, 0, W, H);
-      return;
-    }
-
-    const scale = H / bgImg.height;
-    const dw = bgImg.width * scale;
-    const dh = H;
-
-    const off = ((bgScrollPx % dw) + dw) % dw;
-    const x1 = -off;
-
-    ctx.drawImage(bgImg, 0, 0, bgImg.width, bgImg.height, x1, 0, dw, dh);
-    ctx.drawImage(bgImg, 0, 0, bgImg.width, bgImg.height, x1 + dw, 0, dw, dh);
-  }
-
+  /* ================== DRAW ================== */
   function draw() {
-    drawScrollingBackground();
+    if (haveBg) {
+      const s = H / bgImg.height;
+      const w = bgImg.width * s;
+      const off = ((bgScroll % w) + w) % w;
+      ctx.drawImage(bgImg, 0, 0, bgImg.width, bgImg.height, -off, 0, w, H);
+      ctx.drawImage(bgImg, 0, 0, bgImg.width, bgImg.height, -off + w, 0, w, H);
+    }
 
-    // subtle ground overlay
-    ctx.fillStyle = "rgba(20,14,10,.14)";
-    ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
-    ctx.strokeStyle = "rgba(0,0,0,.22)";
-    ctx.lineWidth = 3;
+    ctx.strokeStyle = "#0006";
     ctx.beginPath();
     ctx.moveTo(0, GROUND_Y);
     ctx.lineTo(W, GROUND_Y);
     ctx.stroke();
 
-    // throwers
-    if (haveThrower && THROWER_FRAMES) {
-      for (const t of throwers) {
-        const f = THROWER_FRAMES[t.frame];
-
-        const scale = THROWER_HEIGHT / f[3];
-        const dw = f[2] * scale;
-        const dh = f[3] * scale;
-
-        const x = t.x;
-        const y = GROUND_Y - dh;
-
-        ctx.save();
-        ctx.globalAlpha = t.alpha;
-        drawThrowerFrame(throwerImg, f, x, y, dw, dh);
-        ctx.restore();
-      }
+    for (const t of throwers) {
+      const f = THROWER_FRAMES[t.frame];
+      const sc = THROWER_HEIGHT / f[3];
+      ctx.save();
+      ctx.globalAlpha = t.alpha;
+      ctx.drawImage(throwerImg, f[0], f[1], f[2], f[3],
+        t.x, GROUND_Y - f[3] * sc, f[2] * sc, f[3] * sc);
+      ctx.restore();
     }
 
-    // stones
+    const growT = invLerp(STONE_GROW_START, STONE_GROW_START + STONE_GROW_SPAN, score);
+    const stoneSize = STONE_BASE_SIZE * (1 + (STONE_MAX_MULT - 1) * growT);
+
     for (const s of stones) {
-      if (haveStone) ctx.drawImage(stoneImg, s.x, s.y, STONE_SIZE, STONE_SIZE);
-      else {
-        ctx.fillStyle = "#cfd3d6";
-        ctx.fillRect(s.x, s.y, STONE_SIZE, STONE_SIZE);
-      }
+      ctx.drawImage(stoneImg, s.x, s.y, stoneSize, stoneSize);
     }
 
-    // player
-    if (haveRunner) {
-      const idx = !player.grounded ? 2 : player.animF ? 1 : 0;
-      const f = RUNNER_FRAMES[idx];
+    const idx = !player.grounded ? 2 : player.animF ? 1 : 0;
+    const f = RUNNER_FRAMES[idx];
+    const sc = PLAYER_HEIGHT / f[3];
+    const py = GROUND_Y - f[3] * sc + player.yOff;
+    ctx.drawImage(runnerImg, f[0], f[1], f[2], f[3],
+      player.x, py, f[2] * sc, f[3] * sc);
 
-      const scale = PLAYER_HEIGHT / f[3];
-      const dw = f[2] * scale;
-      const dh = f[3] * scale;
+    player.hit = {
+      x: player.x + f[2] * sc * 0.3,
+      y: py + f[3] * sc * 0.2,
+      w: f[2] * sc * 0.4,
+      h: f[3] * sc * 0.65,
+    };
 
-      const px = player.x;
-      const py = GROUND_Y - dh + player.yOff;
-
-      ctx.drawImage(runnerImg, f[0], f[1], f[2], f[3], px, py, dw, dh);
-
-      player.hit.x = px + dw * 0.30;
-      player.hit.y = py + dh * 0.18;
-      player.hit.w = dw * 0.40;
-      player.hit.h = dh * 0.70;
-    }
-
-    // HUD inside scene
-    ctx.save();
     ctx.fillStyle = "#fff";
-    ctx.globalAlpha = 0.95;
     ctx.font = "700 18px system-ui";
     ctx.textAlign = "right";
-    ctx.textBaseline = "top";
-    ctx.fillText(`Score: ${score}`, W - 18, 14);
-    ctx.restore();
-
-    // overlays
-    if (!running && !dead) {
-      ctx.fillStyle = "rgba(0,0,0,.35)";
-      ctx.fillRect(0, 0, W, H);
-      ctx.fillStyle = "#fff";
-      ctx.font = "900 44px system-ui";
-      ctx.textAlign = "center";
-      ctx.fillText("Press Space to begin", W / 2, H / 2);
-    }
-
-    if (dead) {
-      ctx.fillStyle = "rgba(0,0,0,.46)";
-      ctx.fillRect(0, 0, W, H);
-      ctx.fillStyle = "#fff";
-      ctx.font = "900 48px system-ui";
-      ctx.textAlign = "center";
-      ctx.fillText("YOU HAVE BEEN MARTYRED", W / 2, H / 2);
-      ctx.font = "16px system-ui";
-      ctx.fillText("Press R to restart", W / 2, H / 2 + 34);
-    }
+    ctx.fillText(`Score: ${score}`, W - 18, 18);
   }
 
-  // ---------------- LOOP ----------------
-  let last = 0;
-  function loop(t) {
-    const now = t / 1000;
-    const dt = Math.min(0.033, now - last || 0);
-    last = now;
-    update(dt);
-    draw();
-    requestAnimationFrame(loop);
-  }
+  /* ================== HELPERS ================== */
+  const clamp01 = (v) => Math.max(0, Math.min(1, v));
+  const invLerp = (a, b, v) => clamp01((v - a) / (b - a));
+  const rect = (r, x, y, w, h) =>
+    r.x < x + w && r.x + r.w > x && r.y < y + h && r.y + r.h > y;
 
-  // ---------------- UTILS ----------------
-  function rect(ax, ay, aw, ah, bx, by, bw, bh) {
-    return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
-  }
-  function clamp01(v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
-
-  // ---------------- BOOT ----------------
-  setStatus("— loading…");
+  /* ================== BOOT ================== */
   resizeCanvas();
-
   Promise.all([
     loadImage(ASSET.runner),
     loadImage(ASSET.thrower),
@@ -468,10 +306,17 @@
     throwerImg = b.img; haveThrower = b.ok;
     stoneImg = c.img; haveStone = c.ok;
     bgImg = d.img; haveBg = d.ok;
-
-    if (haveThrower) THROWER_FRAMES = computeThrowerFrames(throwerImg);
-
+    THROWER_FRAMES = computeThrowerFrames(throwerImg);
     reset();
     requestAnimationFrame(loop);
   });
+
+  let last = 0;
+  function loop(t) {
+    const dt = Math.min(0.033, (t / 1000) - last || 0);
+    last = t / 1000;
+    update(dt);
+    draw();
+    requestAnimationFrame(loop);
+  }
 })();
