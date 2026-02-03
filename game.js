@@ -99,8 +99,8 @@
   const SPAWN_MAX = 2.0;
 
   // These fix “floating” caused by empty pixels under feet in the crop
-  const STEPHEN_FOOT_PAD = 12; // + pushes down
-  const THROWER_FOOT_PAD = 10;
+  const STEPHEN_FOOT_PAD = 30; // + pushes down
+  const THROWER_FOOT_PAD = 30;
 
   // ---------- BEST SCORE ----------
   const BEST_KEY = "stephenRunnerBest";
@@ -114,7 +114,7 @@
 
   const player = {
     x: 0,
-    baseH: 92,
+    baseH: 126,
     yOff: 0, // jump offset (negative up, 0 ground)
     vy: 0,
     grounded: true,
