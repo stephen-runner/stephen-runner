@@ -99,7 +99,7 @@
 
   // crop padding: fix “head/arms missing”
   // If still clipped: increase TOP first.
-  const STEPHEN_PAD = { L: 40, T: 90, R: 60, B: 25 };
+  const STEPHEN_PAD = { L: 6, T: 125, R: 6, B: 10 };
   const THROWER_PAD = { L: 25, T: 35, R: 35, B: 15 };
 
   // feet anchoring: small final nudge
@@ -115,7 +115,7 @@
   const JUMP_V = 1050;
   const MAX_FALL = 1800;
 
-  const STONE_SIZE = 20;
+  const STONE_SIZE = 28;
   const STONE_SPEED = 520;
 
   const SPAWN_MIN = 1.15;
