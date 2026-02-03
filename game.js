@@ -33,7 +33,7 @@
   const BASE = new URL("./", location.href);
   const ASSET = {
     // make sure this points to your NEW runner sheet file name
-    runner: new URL("Assets/Runner.png", BASE).href,
+    runner: new URL("Assets/StephenPixel.png", BASE).href,
     thrower: new URL("Assets/stonethrower.png", BASE).href,
     stone: new URL("Assets/Stone.png", BASE).href,
   };
