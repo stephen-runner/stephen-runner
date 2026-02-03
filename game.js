@@ -21,7 +21,10 @@
 
     W = r.width;
     H = r.height;
+
+    // keep ground consistent with your current feel
     GROUND_Y = Math.floor(H * 0.82);
+
     player.x = Math.floor(W * 0.18);
   }
   window.addEventListener("resize", resizeCanvas);
@@ -32,6 +35,7 @@
     runner: new URL("Assets/StephenPixel.png", BASE).href,
     thrower: new URL("Assets/stonethrower.png", BASE).href,
     stone: new URL("Assets/Stone.png", BASE).href,
+    bg: new URL("Assets/BackgroundGame.png", BASE).href, // <-- new
   };
 
   function loadImage(src) {
@@ -62,8 +66,8 @@
 
   function computeThrowerFrames(img) {
     const totalFramesW = THROWER_FRAME_W * THROWER_COUNT; // 1272
-    const extra = img.width - totalFramesW;              // e.g. 128
-    THROWER_LEFTPAD = Math.max(0, Math.floor(extra / 2)); // e.g. 64
+    const extra = img.width - totalFramesW;
+    THROWER_LEFTPAD = Math.max(0, Math.floor(extra / 2));
     return [
       [THROWER_LEFTPAD + 0 * THROWER_FRAME_W, 0, THROWER_FRAME_W, THROWER_FRAME_H],
       [THROWER_LEFTPAD + 1 * THROWER_FRAME_W, 0, THROWER_FRAME_W, THROWER_FRAME_H],
@@ -72,8 +76,7 @@
     ];
   }
 
-  // Instead of "expand crop", we draw with a *destination shift* so we never sample neighbor frames.
-  // This prevents the "other frame bleed" you’re seeing.
+  // IMPORTANT: no overscan sampling (prevents neighbor-frame bleed)
   function drawThrowerFrame(img, frame, dx, dy, dw, dh) {
     const [sx, sy, sw, sh] = frame;
     ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
@@ -86,23 +89,30 @@
   const STONE_SIZE = 28;
 
   // ---------------- WORLD / SPEED ----------------
-  let WORLD_SPEED = 620;      // faster immediately
-  const WORLD_RAMP = 18;      // ramps faster
+  let WORLD_SPEED = 620;
+  const WORLD_RAMP = 18;
   const WORLD_CAP = 980;
+
+  // Background scroll multiplier (smaller = slower parallax)
+  const BG_SCROLL_MULT = 0.35;
 
   // ---------------- PHYSICS ----------------
   const GRAVITY = 2600;
   const JUMP_V = 900;
   const MAX_FALL = 1800;
 
-  // Stone flight: straight throw with slow gravity drop (no arc)
-  const STONE_SPEED = 820;      // fast forward
-  const STONE_DROP_RATE = 65;   // px/sec downward (slow, subtle)
+  // Stone flight: straight throw with slow gradual fall
+  const STONE_SPEED = 820;
+  const STONE_DROP_RATE = 65;
+
+  // Rare toss (1/10)
+  const STONE_TOSS_CHANCE = 0.10;
+  const STONE_TOSS_GRAV = 1600;
+  const STONE_TOSS_UP = 520;
 
   // ---------------- SPAWNS (VARIED) ----------------
-  // We’ll pick from a pool of intervals so it feels unpredictable:
-  const SPAWN_POOL = [0.5, 0.8, 1.0, 1.4, 2.0, 2.6, 3.0];
-  const SPAWN_JITTER = 0.25; // +/- randomness on top
+  const SPAWN_POOL = [0.5, 0.8, 1.0, 1.4, 2.0, 2.6, 3.0]; // includes 2s
+  const SPAWN_JITTER = 0.25;
 
   // ---------------- BEST SCORE ----------------
   const BEST_KEY = "stephenRunnerBest";
@@ -126,8 +136,11 @@
   const stones = [];
   let nextSpawn = 1.0;
 
-  let runnerImg, throwerImg, stoneImg;
-  let haveRunner = false, haveThrower = false, haveStone = false;
+  // background scroll position (in screen pixels)
+  let bgScrollPx = 0;
+
+  let runnerImg, throwerImg, stoneImg, bgImg;
+  let haveRunner = false, haveThrower = false, haveStone = false, haveBg = false;
 
   // ---------------- INPUT ----------------
   addEventListener("keydown", (e) => {
@@ -180,30 +193,30 @@
 
   function pickSpawnDelay() {
     const base = SPAWN_POOL[(Math.random() * SPAWN_POOL.length) | 0];
-    const jitter = (Math.random() * 2 - 1) * SPAWN_JITTER; // -..+
+    const jitter = (Math.random() * 2 - 1) * SPAWN_JITTER;
     return Math.max(0.35, base + jitter);
   }
 
   // ---------------- SPAWNS ----------------
   function spawnThrower() {
-    // Spawn slightly farther right so they aren’t immediately on screen edge
     throwers.push({
       x: W + 180,
       frame: 0,
       anim: 0,
       thrown: false,
-      // for fade-out at the end
       alpha: 1,
     });
   }
 
   function spawnStone(t) {
-    // Launch from hand area; then fly straight with slight drop.
     const handY = GROUND_Y - THROWER_HEIGHT * 0.60;
+    const toss = Math.random() < STONE_TOSS_CHANCE;
 
     stones.push({
       x: t.x + 110,
       y: handY,
+      toss,
+      vy: toss ? -STONE_TOSS_UP : 0
     });
   }
 
@@ -212,6 +225,9 @@
     if (!running || dead) return;
 
     WORLD_SPEED = Math.min(WORLD_CAP, WORLD_SPEED + WORLD_RAMP * dt);
+
+    // background scroll
+    bgScrollPx += WORLD_SPEED * BG_SCROLL_MULT * dt;
 
     score += Math.floor(140 * dt);
     scoreEl.textContent = String(score);
@@ -265,10 +281,16 @@
       }
     }
 
-    // stones: straight throw with slow gradual fall
+    // stones
     for (const s of stones) {
       s.x -= (WORLD_SPEED + STONE_SPEED) * dt;
-      s.y += STONE_DROP_RATE * dt; // subtle downward drift
+
+      if (s.toss) {
+        s.vy += STONE_TOSS_GRAV * dt;
+        s.y += s.vy * dt;
+      } else {
+        s.y += STONE_DROP_RATE * dt;
+      }
 
       if (rect(player.hit.x, player.hit.y, player.hit.w, player.hit.h, s.x, s.y, STONE_SIZE, STONE_SIZE)) {
         die();
@@ -280,42 +302,36 @@
       if (throwers[i].x < -260) throwers.splice(i, 1);
     }
     for (let i = stones.length - 1; i >= 0; i--) {
-      if (stones[i].x < -220 || stones[i].y > H + 100) stones.splice(i, 1);
+      if (stones[i].x < -220 || stones[i].y > H + 200) stones.splice(i, 1);
     }
   }
 
   // ---------------- DRAW ----------------
-  function drawHills(base, amp, speed, col) {
-    ctx.fillStyle = col;
-    ctx.beginPath();
-    ctx.moveTo(0, H);
-    for (let x = 0; x <= W; x += 40) {
-      const y =
-        base +
-        Math.sin((x + performance.now() / speed) * 0.01) * amp +
-        Math.sin((x + performance.now() / speed) * 0.03) * (amp * 0.4);
-      ctx.lineTo(x, y);
-    }
-    ctx.lineTo(W, H);
-    ctx.fill();
+  function drawScrollingBackground() {
+    if (!haveBg) return;
+
+    // scale bg to fill canvas height
+    const scale = H / bgImg.height;
+    const dw = bgImg.width * scale;
+    const dh = H;
+
+    // wrap offset in screen pixels
+    const off = ((bgScrollPx % dw) + dw) % dw;
+
+    // draw twice to cover full screen
+    const x1 = -off;
+    ctx.drawImage(bgImg, 0, 0, bgImg.width, bgImg.height, x1, 0, dw, dh);
+    ctx.drawImage(bgImg, 0, 0, bgImg.width, bgImg.height, x1 + dw, 0, dw, dh);
   }
 
   function draw() {
-    const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, "#2b2431");
-    g.addColorStop(0.6, "#6e4b3f");
-    g.addColorStop(1, "#a97945");
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, W, H);
+    // Background strip (your 5-scene image)
+    drawScrollingBackground();
 
-    drawHills(GROUND_Y - 220, 24, 30, "rgba(255,220,160,.08)");
-    drawHills(GROUND_Y - 150, 32, 22, "rgba(255,220,160,.12)");
-    drawHills(GROUND_Y - 80, 40, 18, "rgba(0,0,0,.10)");
-
-    // ground
-    ctx.fillStyle = "rgba(20,14,10,.22)";
+    // ground line overlay (keeps current feel)
+    ctx.fillStyle = "rgba(20,14,10,.18)";
     ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
-    ctx.strokeStyle = "rgba(0,0,0,.3)";
+    ctx.strokeStyle = "rgba(0,0,0,.25)";
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.moveTo(0, GROUND_Y);
@@ -370,6 +386,16 @@
       player.hit.h = dh * 0.70;
     }
 
+    // HUD inside the scene (top-right)
+    ctx.save();
+    ctx.fillStyle = "#fff";
+    ctx.globalAlpha = 0.95;
+    ctx.font = "700 18px system-ui";
+    ctx.textAlign = "right";
+    ctx.textBaseline = "top";
+    ctx.fillText(`Score: ${score}`, W - 18, 14);
+    ctx.restore();
+
     // overlays
     if (!running && !dead) {
       ctx.fillStyle = "rgba(0,0,0,.35)";
@@ -413,16 +439,20 @@
   setStatus("— loading…");
   resizeCanvas();
 
-  Promise.all([loadImage(ASSET.runner), loadImage(ASSET.thrower), loadImage(ASSET.stone)]).then(
-    ([a, b, c]) => {
-      runnerImg = a.img; haveRunner = a.ok;
-      throwerImg = b.img; haveThrower = b.ok;
-      stoneImg = c.img; haveStone = c.ok;
+  Promise.all([
+    loadImage(ASSET.runner),
+    loadImage(ASSET.thrower),
+    loadImage(ASSET.stone),
+    loadImage(ASSET.bg),
+  ]).then(([a, b, c, d]) => {
+    runnerImg = a.img; haveRunner = a.ok;
+    throwerImg = b.img; haveThrower = b.ok;
+    stoneImg = c.img; haveStone = c.ok;
+    bgImg = d.img; haveBg = d.ok;
 
-      if (haveThrower) THROWER_FRAMES = computeThrowerFrames(throwerImg);
+    if (haveThrower) THROWER_FRAMES = computeThrowerFrames(throwerImg);
 
-      reset();
-      requestAnimationFrame(loop);
-    }
-  );
+    reset();
+    requestAnimationFrame(loop);
+  });
 })();
